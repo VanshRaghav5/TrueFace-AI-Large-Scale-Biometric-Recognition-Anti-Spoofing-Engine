@@ -5,6 +5,8 @@ from .core.config import settings
 from .core.logging import setup_logging, logger
 from .core.exceptions import BiometricException
 from .api.v1.router import api_router
+from .services.face_runtime import face_runtime
+from .db.database import get_session_factory
 
 setup_logging()
 
@@ -41,6 +43,17 @@ async def biometric_exception_handler(request: Request, exc: BiometricException)
 # Mount API v1 router
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+
+@app.on_event("startup")
+async def initialize_runtime() -> None:
+    face_runtime.initialize()
+    if face_runtime.status.initialized:
+        try:
+            async with get_session_factory()() as session:
+                await face_runtime.hydrate(session)
+        except Exception as exc:
+            face_runtime.status.hydration_error = f"Database gallery hydration failed: {exc}"
+
 @app.get("/")
 async def root():
     return {
@@ -48,4 +61,3 @@ async def root():
         "docs_url": "/docs",
         "api_v1": settings.API_V1_STR
     }
-

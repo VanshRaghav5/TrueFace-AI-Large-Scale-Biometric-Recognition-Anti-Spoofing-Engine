@@ -7,6 +7,11 @@ from ..schemas.voice import VoiceResult
 from ..fusion.fusion_engine import FusionEngine
 from ..fusion.risk_engine import RiskEngine
 from ..fusion.decision_policy import DecisionPolicy
+from .face_runtime import face_runtime
+from ..face.recognition.exceptions import (
+    FaceRecognitionError,
+    ModelUnavailableError,
+)
 
 class AuthenticationService:
     def __init__(
@@ -28,26 +33,48 @@ class AuthenticationService:
         start_time = time.time()
         session_id = f"auth_{uuid.uuid4().hex[:8]}"
 
-        # 1. Process Face Pipeline
         if face_bytes:
-            # Baseline deterministic face processing mock
-            face_result = FaceResult(
-                status=ModalityStatus.AVAILABLE,
-                face_detected=True,
-                identity_similarity=0.88 if claimed_subject_id else 0.85,
-                liveness_score=0.95,
-                deepfake_score=0.97
-            )
+            try:
+                embedding, extraction = face_runtime.extract(face_bytes)
+                subject_id, similarity = face_runtime.search(embedding)
+                is_match = (
+                    subject_id is not None
+                    and similarity is not None
+                    and similarity >= face_runtime.threshold
+                )
+                face_result = FaceResult(
+                    status=ModalityStatus.AVAILABLE,
+                    face_detected=True,
+                    bounding_box=extraction.bounding_box,
+                    identity=subject_id if is_match else None,
+                    recognition_state="known" if is_match else "unknown",
+                    identity_similarity=max(0.0, similarity) if similarity is not None else None,
+                    model_name=extraction.model_name,
+                    providers=face_runtime.status.providers,
+                    processing_time_ms=extraction.inference_time_ms,
+                    reason_codes=["FACE_IDENTITY_MATCH" if is_match else "FACE_IDENTITY_UNKNOWN"],
+                )
+            except ModelUnavailableError:
+                face_result = FaceResult(
+                    status=ModalityStatus.MODEL_UNAVAILABLE,
+                    face_detected=False,
+                    reason_codes=["FACE_MODEL_UNAVAILABLE"],
+                )
+            except FaceRecognitionError:
+                face_result = FaceResult(
+                    status=ModalityStatus.ERROR,
+                    face_detected=False,
+                    reason_codes=["FACE_INFERENCE_ERROR"],
+                )
         else:
             face_result = FaceResult(status=ModalityStatus.MISSING, face_detected=False)
 
         # 2. Process Voice Pipeline
         if voice_bytes:
             voice_result = VoiceResult(
-                status=ModalityStatus.AVAILABLE,
-                speech_detected=True,
-                identity_similarity=0.84 if claimed_subject_id else 0.82,
-                antispoof_score=0.92
+                status=ModalityStatus.MODEL_UNAVAILABLE,
+                speech_detected=False,
+                reason_codes=["VOICE_MODEL_UNAVAILABLE"],
             )
         else:
             voice_result = VoiceResult(status=ModalityStatus.MISSING, speech_detected=False)
@@ -80,4 +107,3 @@ class AuthenticationService:
             voice_result=voice_result,
             latency_ms=latency_ms
         )
-

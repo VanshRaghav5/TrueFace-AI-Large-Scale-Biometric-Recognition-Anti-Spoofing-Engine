@@ -1,16 +1,43 @@
-import uuid
 from typing import Optional
-import numpy as np
-from ..core.exceptions import ConsentRequiredError, BiometricQualityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from ..core.exceptions import ConsentRequiredError
 from ..schemas.enrollment import EnrollmentResponse
-from ..search.faiss_store import FAISSStore
+from .face_runtime import face_runtime
+from ..db.models.subject import Subject
+from sqlalchemy import select
 
 class EnrollmentService:
-    def __init__(self, vector_store: Optional[FAISSStore] = None):
-        self.vector_store = vector_store or FAISSStore()
+    async def list_subjects(self, session: AsyncSession) -> list[dict]:
+        result = await session.execute(
+            select(Subject).where(Subject.is_active == True).order_by(Subject.created_at)
+        )
+        return [
+            {
+                "subject_id": subject.pseudonymous_id,
+                "consent_granted": subject.consent_granted,
+                "created_at": subject.created_at,
+            }
+            for subject in result.scalars().all()
+        ]
+
+    async def delete_subject(self, session: AsyncSession, subject_id: str) -> bool:
+        result = await session.execute(
+            select(Subject).where(
+                Subject.pseudonymous_id == subject_id,
+                Subject.is_active == True,
+            )
+        )
+        subject = result.scalars().first()
+        if subject is None:
+            return False
+        subject.is_active = False
+        await session.flush()
+        await face_runtime.hydrate(session)
+        return True
 
     async def enroll_subject(
         self,
+        session: AsyncSession,
         subject_id: str,
         consent_confirmed: bool,
         face_bytes: Optional[bytes] = None,
@@ -19,24 +46,22 @@ class EnrollmentService:
         if not consent_confirmed:
             raise ConsentRequiredError("Enrollment rejected: Explicit subject consent must be confirmed.")
 
-        face_enrolled = False
-        voice_enrolled = False
-
-        if face_bytes:
-            # Generate normalized face embedding placeholder/stub
-            dummy_face_embedding = np.random.randn(512).astype("float32")
-            dummy_face_embedding /= np.linalg.norm(dummy_face_embedding)
-            self.vector_store.add_vector(dummy_face_embedding, subject_id)
-            face_enrolled = True
-
         if voice_bytes:
-            voice_enrolled = True
-
-        return EnrollmentResponse(
-            enrollment_id=f"enr_{uuid.uuid4().hex[:8]}",
-            subject_id=subject_id,
-            status="success",
-            face_enrolled=face_enrolled,
-            voice_enrolled=voice_enrolled
+            raise ValueError("Voice enrollment is unavailable until an authorized voice model is configured")
+        if not face_bytes:
+            raise ValueError("A face image is required for face enrollment")
+        subject, result, created = await face_runtime.enroll(
+            session, subject_id, consent_confirmed, face_bytes
         )
-
+        return EnrollmentResponse(
+            enrollment_id=str(subject.id),
+            subject_id=subject_id,
+            status="enrolled" if created else "duplicate",
+            face_enrolled=True,
+            voice_enrolled=False,
+            template_count=face_runtime.status.template_count,
+            detail=(
+                f"{result.model_name} detected one face"
+                if created else "This face template is already enrolled"
+            ),
+        )

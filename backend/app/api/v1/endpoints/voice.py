@@ -9,21 +9,17 @@ async def verify_voice(
     claimed_subject_id: Optional[str] = Form(None),
     voice_sample: UploadFile = File(...)
 ):
-    # Standalone speaker verification stub
     return VoiceResult(
-        status=ModalityStatus.AVAILABLE,
-        speech_detected=True,
-        identity_similarity=0.85,
-        antispoof_score=0.93,
-        reason_codes=["VOICE_IDENTITY_MATCH"]
+        status=ModalityStatus.MODEL_UNAVAILABLE,
+        speech_detected=False,
+        reason_codes=["VOICE_MODEL_UNAVAILABLE"],
     )
 
 @router.post("/antispoof")
 async def evaluate_antispoof(voice_sample: UploadFile = File(...)):
-    # Standalone synthetic speech / replay detection
     return {
-        "genuine_probability": 0.93,
-        "is_synthetic_speech": False,
-        "spoof_artifact_score": 0.07
+        "status": ModalityStatus.MODEL_UNAVAILABLE,
+        "genuine_probability": None,
+        "is_synthetic_speech": None,
+        "reason_codes": ["VOICE_ANTISPOOF_MODEL_UNAVAILABLE"],
     }
-

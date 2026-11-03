@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
 from ..database import Base
 
@@ -14,5 +14,6 @@ class BiometricTemplate(Base):
     model_version = Column(String(32), nullable=False)
     vector_store_index = Column(Integer, nullable=True)
     template_hash = Column(String(64), nullable=False)
+    embedding = Column(LargeBinary, nullable=False)
+    embedding_dimension = Column(Integer, nullable=False, default=512)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-

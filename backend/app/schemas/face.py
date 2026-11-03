@@ -22,9 +22,13 @@ class FaceResult(BaseModel):
     status: ModalityStatus = ModalityStatus.AVAILABLE
     face_detected: bool = True
     bounding_box: Optional[List[int]] = Field(None, description="[x1, y1, x2, y2]")
+    identity: Optional[str] = None
+    recognition_state: Optional[str] = None
+    model_name: Optional[str] = None
+    providers: List[str] = Field(default_factory=list)
+    processing_time_ms: Optional[float] = None
     identity_similarity: Optional[float] = Field(None, ge=0.0, le=1.0)
     liveness_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="PAD authenticity probability")
     deepfake_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Genuineness probability (1.0 = real)")
     quality: Optional[FaceQualityMetrics] = None
     reason_codes: List[str] = Field(default_factory=list)
-

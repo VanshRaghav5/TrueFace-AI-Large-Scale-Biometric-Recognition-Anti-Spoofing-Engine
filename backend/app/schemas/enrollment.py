@@ -8,5 +8,6 @@ class EnrollmentResponse(BaseModel):
     status: str
     face_enrolled: bool
     voice_enrolled: bool
+    template_count: int = 0
+    detail: Optional[str] = None
     enrolled_at: datetime = Field(default_factory=datetime.utcnow)
-
