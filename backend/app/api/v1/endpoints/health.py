@@ -56,7 +56,12 @@ async def get_health():
                 "skipped_template_count": face_runtime.status.skipped_template_count,
                 "hydration_error": face_runtime.status.hydration_error,
             },
-            "face_pad": "configured" if pad_path.is_file() else "unavailable",
+            "face_pad": {
+                "status": "ready" if face_runtime.status.pad_initialized else "unavailable",
+                "model_name": face_runtime.status.pad_model_name,
+                "provider": face_runtime.status.pad_provider,
+                "error": face_runtime.status.pad_error,
+            },
             "face_deepfake": "configured" if deepfake_path.is_file() else "unavailable",
             "voice_vad": "unavailable",
             "voice_recognizer": "unavailable",

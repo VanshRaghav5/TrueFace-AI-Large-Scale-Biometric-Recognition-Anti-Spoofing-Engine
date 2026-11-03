@@ -1,7 +1,6 @@
 # PAD Real-Inference Readiness Audit
 
-Status: **ready for a separately authorized artifact; real inference has not
-been run**.
+Status: **local artifact loaded; academic-only validation remains limited**.
 
 This audit covers the Open Model Zoo `anti-spoof-mn3` adapter and its
 per-face integration. It does not authorize, download, convert, or execute a
@@ -33,12 +32,20 @@ also validates output shape, finiteness, probability range, and probability
 sum. A malformed model is unavailable at load time or an error at inference
 time; it cannot produce a bona-fide result.
 
-The adapter reports the providers returned by the actual session. The
-preferred provider order is `CUDAExecutionProvider` followed by
-`CPUExecutionProvider`. Provider availability alone is not evidence that a
-particular inference executed on CUDA. A future real run must record the
-session provider and, if GPU claims matter, collect ONNX Runtime profiling
-evidence.
+The adapter reports the provider used by the loaded session. For real
+ONNX Runtime sessions, CUDA is selected only when the required CUDA/cuDNN
+runtime libraries can be loaded; otherwise the session is created with CPU
+only, preventing a misleading CUDA claim. Provider availability alone is not
+evidence that a particular inference executed on CUDA.
+
+The local artifact was downloaded from the official Open Model Zoo storage
+URL. Its observed size is `12270179` bytes, SHA-256 is
+`c4c99af04603b62d7e44f6f4daeb33e0daeccc696008c0b1d62f6f5cebbb3262`, and
+SHA-512 is
+`aad134642b87959c6ac6f98c2403eac389df7d5ccf9b7e9ff995deb91456b4e91848ea5c91fc9544b2e63b02db600d43d1824568fef1407830f480e38fed9ae2`.
+The observed SHA-512 does not match the digest currently published in the
+Open Model Zoo manifest, so the file is usable for local academic testing but
+is not recorded as manifest-verified or suitable for redistribution.
 
 ## Authorization checklist
 
@@ -52,7 +59,7 @@ evidence.
 | Redistribution | Not assumed | Written permission or terms allowing the planned storage/distribution |
 | Commercial use | Not assumed/permitted | Separate commercial clearance if applicable |
 | ONNX conversion/derivative artifact | Not independently established | Artifact provenance and conversion/derivative permissions |
-| Artifact integrity | No local artifact | SHA-256 calculated after authorized acquisition |
+| Artifact integrity | Local hash differs from published manifest | Clarify the checksum discrepancy before redistribution |
 
 Source-code and repository licenses do not automatically license pretrained
 weights or data-derived artifacts. The model remains **NOT CLEARED** until
@@ -75,6 +82,20 @@ audit identified it as a 128-character digest apparently representing
 SHA-512. Recompute SHA-256 locally.
 
 ## Runtime behavior
+
+The FastAPI runtime now attempts to initialize the configured
+`models/liveness/anti-spoof-mn3.onnx` artifact during startup. If the file is
+absent, recognition continues in recognition-only mode and health reports PAD
+as unavailable. If the file exists but fails metadata or provider validation,
+health reports the load error and no PAD session is attached.
+
+When initialization succeeds:
+
+- `/api/v1/face/pad` runs real inference on exactly one detected face.
+- `/api/v1/face/live` attaches PAD results to each independently tracked face.
+- PAD uses the existing SCRFD detections and does not alter ArcFace identity
+  matching.
+- The health response reports the actual ONNX Runtime provider.
 
 ### Recognition-only mode
 

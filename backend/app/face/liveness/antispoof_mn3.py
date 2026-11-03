@@ -121,15 +121,10 @@ class AntiSpoofMn3Engine:
     def _providers(self) -> list[str]:
         if self.config.providers is not None:
             return list(self.config.providers)
-        try:
-            import onnxruntime
-            available = onnxruntime.get_available_providers()
-        except Exception as exc:
-            raise PadModelUnavailableError(
-                f"ONNX Runtime is unavailable for anti-spoof-mn3: {exc}"
-            ) from exc
-        preferred = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        return [provider for provider in preferred if provider in available]
+        # A default session must be truthful across machines. Callers that
+        # explicitly configure CUDA can opt into it after validating the
+        # machine's CUDA/cuDNN runtime.
+        return ["CPUExecutionProvider"]
 
     @staticmethod
     def _validate_metadata(session: object) -> str:
@@ -178,10 +173,21 @@ class AntiSpoofMn3Engine:
         try:
             if factory is None:
                 import onnxruntime
-                session = onnxruntime.InferenceSession(
-                    str(self.config.model_path),
-                    providers=providers,
-                )
+                if "CUDAExecutionProvider" in providers:
+                    session = onnxruntime.InferenceSession(
+                        str(self.config.model_path),
+                        providers=["CUDAExecutionProvider"],
+                    )
+                    if "CUDAExecutionProvider" not in session.get_providers():
+                        session = onnxruntime.InferenceSession(
+                            str(self.config.model_path),
+                            providers=["CPUExecutionProvider"],
+                        )
+                else:
+                    session = onnxruntime.InferenceSession(
+                        str(self.config.model_path),
+                        providers=providers,
+                    )
             else:
                 try:
                     session = factory(self.config.model_path, providers=providers)

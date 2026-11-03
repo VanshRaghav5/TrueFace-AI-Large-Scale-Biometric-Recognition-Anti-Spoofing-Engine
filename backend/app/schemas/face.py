@@ -29,6 +29,9 @@ class FaceResult(BaseModel):
     processing_time_ms: Optional[float] = None
     identity_similarity: Optional[float] = Field(None, ge=0.0, le=1.0)
     liveness_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="PAD authenticity probability")
+    pad_spoof_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    pad_state: Optional[str] = None
+    pad_provider: Optional[str] = None
     deepfake_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Genuineness probability (1.0 = real)")
     quality: Optional[FaceQualityMetrics] = None
     reason_codes: List[str] = Field(default_factory=list)

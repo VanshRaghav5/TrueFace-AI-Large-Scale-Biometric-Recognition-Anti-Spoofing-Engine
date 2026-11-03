@@ -3,6 +3,7 @@
 import hashlib
 from datetime import datetime
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -14,6 +15,7 @@ from ..db.models.subject import Subject
 from ..db.models.template import BiometricTemplate
 from ..face.recognition.arcface_engine import ArcFaceEngine, EmbeddingResult
 from ..face.recognition.exceptions import FaceRecognitionError, ModelUnavailableError
+from ..face.liveness import AntiSpoofMn3Config, AntiSpoofMn3Engine
 from ..search.faiss_store import FAISSStore
 try:
     from backend.realtime.config import RealtimeConfig
@@ -38,6 +40,10 @@ class FaceRuntimeStatus:
     skipped_template_count: int = 0
     hydration_error: Optional[str] = None
     hydrated: bool = False
+    pad_initialized: bool = False
+    pad_error: Optional[str] = None
+    pad_model_name: str = "anti-spoof-mn3"
+    pad_provider: Optional[str] = None
 
 
 class FaceRuntime:
@@ -51,6 +57,7 @@ class FaceRuntime:
         self.gallery = FAISSStore(dimension=settings.VECTOR_DIMENSION)
         self.realtime_gallery = IdentityGallery(threshold=settings.FACE_MATCH_THRESHOLD)
         self.realtime: Optional[RealtimeRecognizer] = None
+        self.pad: Optional[AntiSpoofMn3Engine] = None
         self.status = FaceRuntimeStatus(
             model_name=f"arcface_{settings.FACE_MODEL_PACK}"
         )
@@ -65,15 +72,48 @@ class FaceRuntime:
             self.status.initialized = True
             self.status.error = None
             self.status.providers = tuple(self.engine.active_providers)
+            self._initialize_pad()
             self.realtime = RealtimeRecognizer(
                 self.engine,
                 self.realtime_gallery,
                 RealtimeConfig(),
+                pad_adapter=self.pad,
+                pad_threshold=None,
             )
         except Exception as exc:
             self.status.initialized = False
             self.status.error = str(exc)
         return self.status
+
+    @staticmethod
+    def _model_path(configured_path: str) -> Path:
+        path = Path(configured_path)
+        if path.is_absolute():
+            return path
+        return Path(__file__).resolve().parents[3] / path
+
+    def _initialize_pad(self) -> None:
+        model_path = self._model_path(settings.FACE_LIVENESS_MODEL_PATH)
+        if not model_path.is_file():
+            self.pad = None
+            self.status.pad_initialized = False
+            self.status.pad_error = None
+            self.status.pad_provider = None
+            return
+        try:
+            pad = AntiSpoofMn3Engine(
+                AntiSpoofMn3Config(model_path=model_path)
+            )
+            pad.load_model()
+            self.pad = pad
+            self.status.pad_initialized = True
+            self.status.pad_error = None
+            self.status.pad_provider = pad.execution_provider
+        except Exception as exc:
+            self.pad = None
+            self.status.pad_initialized = False
+            self.status.pad_error = str(exc)
+            self.status.pad_provider = None
 
     async def hydrate(self, session: AsyncSession) -> None:
         """Rebuild the searchable gallery from database-backed templates."""
@@ -131,9 +171,49 @@ class FaceRuntime:
                 "detection_score": result.detection_score,
                 "processing_time_ms": result.total_processing_latency_ms,
                 "provider": result.arcface_provider,
+                "pad_state": result.pad_state,
+                "pad_real_score": result.pad_real_score,
+                "pad_spoof_score": result.pad_spoof_score,
+                "pad_latency_ms": result.pad_latency_ms,
+                "pad_provider": result.pad_provider,
             }
             for result in results
         ]
+
+    def evaluate_pad(self, image_bytes: bytes) -> dict:
+        self._require_ready()
+        if self.pad is None:
+            raise ModelUnavailableError(
+                self.status.pad_error or "PAD model is unavailable"
+            )
+        image = self.engine.load_image_from_bytes(image_bytes)
+        faces = self.engine.detect_faces(image)
+        if len(faces) == 0:
+            raise FaceRecognitionError("No face detected for PAD evaluation")
+        if len(faces) > 1:
+            raise FaceRecognitionError("PAD evaluation requires exactly one face")
+        face = faces[0]
+        height, width = image.shape[:2]
+        x1, y1, x2, y2 = face.bounding_box
+        left, top = max(0, x1), max(0, y1)
+        right, bottom = min(width, x2), min(height, y2)
+        if right <= left or bottom <= top:
+            raise FaceRecognitionError("Detected face crop is invalid")
+        raw = self.pad.predict_raw(image[top:bottom, left:right])
+        threshold = None
+        return {
+            "status": "available",
+            "face_detected": True,
+            "bounding_box": face.bounding_box,
+            "model_name": raw.model_name,
+            "model_version": raw.model_version,
+            "provider": raw.execution_provider,
+            "real_score": raw.real_score,
+            "spoof_score": raw.spoof_score,
+            "threshold": threshold,
+            "pad_state": "uncertain",
+            "inference_time_ms": raw.inference_time_ms,
+        }
 
     @staticmethod
     def _validate_embedding(embedding: np.ndarray) -> np.ndarray:

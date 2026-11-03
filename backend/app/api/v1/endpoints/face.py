@@ -28,6 +28,11 @@ async def verify_face(
         if claimed_subject_id and subject_id != claimed_subject_id:
             matched = False
             subject_id = None
+        pad = None
+        pad_reason_codes = ["FACE_PAD_UNAVAILABLE"]
+        if face_runtime.status.pad_initialized:
+            pad = face_runtime.evaluate_pad(image_bytes)
+            pad_reason_codes = ["FACE_PAD_THRESHOLD_UNCALIBRATED"]
         return FaceResult(
             status=ModalityStatus.AVAILABLE,
             face_detected=True,
@@ -40,7 +45,14 @@ async def verify_face(
             model_name=extraction.model_name,
             providers=face_runtime.status.providers,
             processing_time_ms=round((time.perf_counter() - started) * 1000, 2),
-            reason_codes=["FACE_IDENTITY_MATCH" if matched else "FACE_IDENTITY_UNKNOWN"],
+            liveness_score=pad["real_score"] if pad else None,
+            pad_spoof_score=pad["spoof_score"] if pad else None,
+            pad_state=pad["pad_state"] if pad else "unavailable",
+            pad_provider=pad["provider"] if pad else None,
+            reason_codes=(
+                ["FACE_IDENTITY_MATCH" if matched else "FACE_IDENTITY_UNKNOWN"]
+                + pad_reason_codes
+            ),
         )
     except ModelUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
@@ -56,12 +68,18 @@ def face_runtime_threshold() -> float:
 
 @router.post("/pad")
 async def evaluate_pad(face_image: UploadFile = File(...)):
-    return {
-        "status": ModalityStatus.MODEL_UNAVAILABLE,
-        "liveness_probability": None,
-        "is_genuine": None,
-        "reason_codes": ["FACE_PAD_MODEL_UNAVAILABLE"],
-    }
+    try:
+        return face_runtime.evaluate_pad(await face_image.read())
+    except ModelUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        )
+    except (InvalidImageError, FaceRecognitionError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
 
 
 @router.post("/live")
