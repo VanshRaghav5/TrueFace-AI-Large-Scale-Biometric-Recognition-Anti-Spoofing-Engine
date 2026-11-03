@@ -63,10 +63,14 @@ evaluation/datasets/voice/*
 !evaluation/datasets/voice/.gitkeep
 evaluation/datasets/deepfake/*
 !evaluation/datasets/deepfake/.gitkeep
+Trueface_Dataset/*
+!Trueface_Dataset/.gitkeep
 evaluation/plots/*.png
 evaluation/plots/*.svg
 evaluation/plots/*.pdf
 !evaluation/plots/.gitkeep
+evaluation/reports/*
+!evaluation/reports/.gitkeep
 
 # Vector Index Artifacts
 *.faiss
@@ -78,6 +82,7 @@ logs/
 *.log
 *.tmp
 *.temp
+_projfiles.txt
 
 # OS & Editor Files
 .DS_Store
@@ -86,4 +91,3 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-
