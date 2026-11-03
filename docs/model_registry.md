@@ -12,7 +12,7 @@
 |---|---|---|---|---|---|
 | **Face** | Detection & Alignment | RetinaFace / MediaPipe | 640x640x3 RGB | 5 landmarks, Bounding Box | MIT / Apache 2.0 |
 | **Face** | Identity Recognition | ArcFace (ResNet-50 / iResNet) | 112x112x3 aligned RGB | 512-d normalized vector | MIT / Academic |
-| **Face** | Presentation Attack Detection (PAD) | MiniFASNet / CDCN | 80x80 or 112x112 RGB | Binary liveness prob [0, 1] | Apache 2.0 / BSD |
+| **Face** | Presentation Attack Detection (PAD) | MiniFASNet / anti-spoof-mn3 | Model-specific: 80x80 BGR ensemble or 128x128 BGR | Model-specific calibrated bona-fide score | NOT CLEARED; verify source, weights and dataset terms |
 | **Face** | Deepfake / Manipulation Detection | EfficientNet-B4 / MesoNet | 224x224x3 cropped face | Fake probability [0, 1] | Apache 2.0 |
 | **Voice** | Voice Activity Detection (VAD) | Silero VAD / WebRTC VAD | 16kHz mono audio | Speech intervals / segments | MIT |
 | **Voice** | Speaker Verification | ECAPA-TDNN / ResNetSE34V2 | 16kHz audio (>= 3s) | 192-d or 256-d embedding | Apache 2.0 / MIT |
@@ -32,6 +32,10 @@
 ### 2.2 Face Presentation Attack Detection (PAD)
 - **Target Attacks:** 2D photo prints (matte/glossy), screen replay attacks (tablets/phones).
 - **Output:** Calibrated authenticity score $S_{pad} \in [0.0, 1.0]$ where $1.0$ is genuine live presentation.
+- **anti-spoof-mn3 candidate:** The separate adapter expects the OMZ converted
+  artifact's 128x128 BGR input, applies the documented mean/scale
+  normalization, and interprets output class 0 as real and class 1 as spoof.
+  The artifact remains NOT CLEARED; no weights are stored or executed.
 
 ### 2.3 Face Deepfake Detection
 - **Target Attacks:** AI face swap, facial reenactment, diffusion-generated faces.
@@ -60,10 +64,9 @@ models/
 │   ├── vad/
 │   └── speaker_verification/
 ├── liveness/
-│   └── pad_model.onnx
+│   └── anti-spoof-mn3.onnx
 ├── deepfake/
 │   └── manipulation_model.onnx
 └── audio_antispoof/
     └── synthetic_speech_model.onnx
 ```
-

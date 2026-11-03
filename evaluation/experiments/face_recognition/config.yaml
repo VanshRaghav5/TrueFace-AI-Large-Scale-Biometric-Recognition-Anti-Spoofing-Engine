@@ -1,0 +1,21 @@
+model_pack: buffalo_l
+threshold_source: validation_only
+split:
+  train_fraction: 0.6
+  validation_fraction: 0.2
+  test_fraction: 0.2
+  identity_disjoint: true
+  random_seed: 42
+output_policy:
+  dataset_and_embeddings_outside_git: true
+  failed_images_are_recorded: true
+datasets:
+  - name: LFW
+    status: not_downloaded
+    source: http://vis-www.cs.umass.edu/lfw/
+  - name: CFP-FP
+    status: not_downloaded
+    source: https://www.cfpw.io/
+  - name: AgeDB
+    status: not_downloaded
+    source: https://ibug.doc.ic.ac.uk/resources/agedb/
