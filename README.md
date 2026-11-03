@@ -13,6 +13,11 @@ TrueFace AI-X is an academic research prototype evaluating whether combining fac
 - **Multimodal Fusion & Risk Engine:** Calibrated score fusion, risk policy evaluation, and explainable decision gating (`allow`, `step_up`, `block`, `error`) accompanied by machine-readable reason codes.
 - **Interactive Dashboard:** Next.js + React + Tailwind CSS client for biometric enrollment, authentication walkthrough, verification results, audit inspection, and evaluation visualization.
 
+> Runtime status: ArcFace/SCRFD and the local recognition demo are implemented.
+> PAD, deepfake, and voice branches remain explicitly unavailable until their
+> exact authorized model artifacts and configuration are supplied. The API
+> does not return fabricated biometric scores.
+
 ---
 
 ## System Architecture
@@ -69,6 +74,42 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 The OpenAPI documentation will be accessible at: `http://localhost:8000/docs`
 
+The backend initializes the cached InsightFace `buffalo_l` pack at startup and
+rebuilds the face gallery from PostgreSQL templates. Set a valid
+`DATABASE_URL` before using enrollment, then run the migration explicitly.
+For Supabase, use the **Session pooler** connection URI from the Supabase
+Dashboard's **Connect** dialog. Change its scheme to
+`postgresql+asyncpg://` and retain `?ssl=require`:
+
+```env
+DATABASE_URL=postgresql+asyncpg://<pooler-user>:<database-password>@<session-pooler-host>:5432/postgres?ssl=require
+```
+
+Do not put a Supabase publishable key, service-role key, or database password
+in frontend code or Git. The database password belongs only in the ignored
+root `.env` file.
+
+Run the migration explicitly:
+
+```powershell
+cd backend
+alembic -c alembic.ini upgrade head
+```
+
+The face API endpoints are:
+
+```text
+POST   /api/v1/enrollment             multipart subject_id, consent_confirmed, face_image
+GET    /api/v1/enrollment             list active enrolled identities
+DELETE /api/v1/enrollment/{subject_id} deactivate an enrollment
+POST   /api/v1/face/verify            multipart face_image, optional claimed_subject_id
+GET    /api/v1/health                 model/provider/database readiness
+```
+
+Enrollment stores only validated normalized embeddings and template metadata;
+uploaded images are not persisted by the API. PAD, deepfake, and voice
+endpoints remain explicitly unavailable until authorized model runtimes exist.
+
 ### 3. Run Frontend (Next.js)
 
 ```bash
@@ -106,4 +147,3 @@ docker-compose up --build
 - **Privacy by Design:** No raw biometric media, audio waveforms, or full raw embeddings are retained in logs or transmitted across public endpoints.
 - **Deterministic Risk Engine:** No autonomous or hallucinating LLMs are permitted in the biometric authentication decision path.
 - **Academic Scope:** TrueFace AI-X is a research prototype developed for academic evaluation and is not certified for production high-risk access control.
-
