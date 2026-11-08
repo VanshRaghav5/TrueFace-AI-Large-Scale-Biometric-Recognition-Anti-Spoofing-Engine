@@ -54,6 +54,21 @@ class AuthenticationService:
                     processing_time_ms=extraction.inference_time_ms,
                     reason_codes=["FACE_IDENTITY_MATCH" if is_match else "FACE_IDENTITY_UNKNOWN"],
                 )
+                try:
+                    pad = face_runtime.evaluate_pad(face_bytes)
+                    face_result.liveness_score = pad["real_score"]
+                    face_result.pad_spoof_score = pad["spoof_score"]
+                    face_result.pad_state = pad["pad_state"]
+                    face_result.pad_provider = pad["provider"]
+                    face_result.reason_codes.append(
+                        "FACE_PAD_THRESHOLD_UNCALIBRATED"
+                        if pad["pad_state"] == "uncertain"
+                        else f"FACE_PAD_{str(pad['pad_state']).upper()}"
+                    )
+                except ModelUnavailableError:
+                    face_result.reason_codes.append("FACE_PAD_UNAVAILABLE")
+                except FaceRecognitionError:
+                    face_result.reason_codes.append("FACE_PAD_EVALUATION_ERROR")
             except ModelUnavailableError:
                 face_result = FaceResult(
                     status=ModalityStatus.MODEL_UNAVAILABLE,
