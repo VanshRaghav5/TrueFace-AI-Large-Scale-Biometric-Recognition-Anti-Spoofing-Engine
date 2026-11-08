@@ -1,8 +1,10 @@
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends
 from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 from ....schemas.authentication import AuthenticationResponse
 from ....services.authentication_service import AuthenticationService
 from ....services.audit_service import AuditService
+from ....db.database import get_db
 
 router = APIRouter()
 auth_service = AuthenticationService()
@@ -12,7 +14,8 @@ audit_service = AuditService()
 async def verify_biometrics(
     claimed_subject_id: Optional[str] = Form(None),
     face_image: Optional[UploadFile] = File(None),
-    voice_sample: Optional[UploadFile] = File(None)
+    voice_sample: Optional[UploadFile] = File(None),
+    session: AsyncSession = Depends(get_db),
 ):
     try:
         face_bytes = await face_image.read() if face_image else None
@@ -25,11 +28,10 @@ async def verify_biometrics(
         )
 
         # Asynchronously record audit event
-        await audit_service.record_verification(result)
+        await audit_service.record_verification(result, session)
         return result
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Biometric processing failed: {str(e)}"
         )
-
