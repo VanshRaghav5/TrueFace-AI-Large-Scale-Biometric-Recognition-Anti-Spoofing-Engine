@@ -14,9 +14,9 @@ class AuditEvent(Base):
     reason_codes = Column(JSON, nullable=False, default=list)
     face_similarity = Column(Float, nullable=True)
     face_liveness = Column(Float, nullable=True)
+    face_pad_spoof = Column(Float, nullable=True)
     voice_similarity = Column(Float, nullable=True)
     voice_antispoof = Column(Float, nullable=True)
     fused_score = Column(Float, nullable=True)
     latency_ms = Column(Integer, nullable=False)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-
