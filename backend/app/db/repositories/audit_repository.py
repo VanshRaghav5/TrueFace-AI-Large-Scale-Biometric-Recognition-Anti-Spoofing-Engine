@@ -13,8 +13,15 @@ class AuditRepository:
         await self.session.flush()
         return event
 
-    async def list_events(self, limit: int = 50, offset: int = 0) -> List[AuditEvent]:
-        stmt = select(AuditEvent).order_by(desc(AuditEvent.created_at)).offset(offset).limit(limit)
+    async def list_events(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        decision: Optional[str] = None,
+    ) -> List[AuditEvent]:
+        stmt = select(AuditEvent)
+        if decision:
+            stmt = stmt.where(AuditEvent.overall_decision == decision)
+        stmt = stmt.order_by(desc(AuditEvent.created_at)).offset(offset).limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
-
