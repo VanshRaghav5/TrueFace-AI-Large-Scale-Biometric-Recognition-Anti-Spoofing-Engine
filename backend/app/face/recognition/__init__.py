@@ -24,6 +24,7 @@ from .arcface_engine import (
     EmbeddingResult,
     VerificationResult,
 )
+from .arcface_onnx import ArcFaceONNX
 from .exceptions import (
     FaceNotDetectedError,
     FaceRecognitionError,
@@ -35,6 +36,7 @@ from .verifier import FaceVerifier
 
 __all__ = [
     "ArcFaceEngine",
+    "ArcFaceONNX",
     "DetectedFace",
     "EmbeddingResult",
     "VerificationResult",

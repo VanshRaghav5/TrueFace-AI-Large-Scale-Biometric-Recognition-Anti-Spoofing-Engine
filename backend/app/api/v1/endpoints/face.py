@@ -19,15 +19,14 @@ async def verify_face(
     try:
         image_bytes = await face_image.read()
         embedding, extraction = face_runtime.extract(image_bytes)
-        subject_id, similarity = face_runtime.search(embedding)
+        subject_id, similarity = face_runtime.search(
+            embedding, target_subject_id=claimed_subject_id
+        )
         matched = (
             subject_id is not None
             and similarity is not None
             and similarity >= face_runtime_threshold()
         )
-        if claimed_subject_id and subject_id != claimed_subject_id:
-            matched = False
-            subject_id = None
         pad = None
         pad_reason_codes = ["FACE_PAD_UNAVAILABLE"]
         if face_runtime.status.pad_initialized:

@@ -177,6 +177,7 @@ class ArcFaceEngine:
 
             self._app = FaceAnalysis(
                 name=self.model_pack,
+                allowed_modules=["detection", "recognition"],
                 providers=providers,
                 **({"sess_options": session_options} if session_options else {}),
             )
@@ -566,12 +567,12 @@ class ArcFaceEngine:
             )
 
         try:
-            from insightface.utils import face_align
+            from ..alignment.face_align import norm_crop
 
             self.diagnostic_dir.mkdir(parents=True, exist_ok=True)
             stem = Path(diagnostic_name or "face").stem
             crop_path = self.diagnostic_dir / f"{stem}_aligned.jpg"
-            aligned_face = face_align.norm_crop(
+            aligned_face = norm_crop(
                 image,
                 landmark=face.kps,
                 image_size=112,

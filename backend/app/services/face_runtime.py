@@ -239,9 +239,22 @@ class FaceRuntime:
         result = self.engine.extract_embedding(image, allow_multiple=False)
         return self._validate_embedding(result.embedding), result
 
-    def search(self, embedding: np.ndarray) -> tuple[Optional[str], Optional[float]]:
-        results = self.gallery.search(self._validate_embedding(embedding), top_k=1)
+    def search(
+        self,
+        embedding: np.ndarray,
+        top_k: int = 1,
+        target_subject_id: Optional[str] = None,
+    ) -> tuple[Optional[str], Optional[float]]:
+        if self.gallery is None or not hasattr(self.gallery, "search"):
+            return None, None
+        k = max(top_k, 20 if target_subject_id else 1)
+        results = self.gallery.search(self._validate_embedding(embedding), top_k=k)
         if not results:
+            return None, None
+        if target_subject_id:
+            for subj_id, sim in results:
+                if subj_id == target_subject_id:
+                    return subj_id, max(-1.0, min(1.0, float(sim)))
             return None, None
         subject_id, similarity = results[0]
         return subject_id, max(-1.0, min(1.0, float(similarity)))
@@ -271,11 +284,12 @@ class FaceRuntime:
             )
             session.add(subject)
             await session.flush()
-        elif not subject.is_active:
-            raise FaceRecognitionError("Subject enrollment is inactive")
-        elif not subject.consent_granted:
+        else:
+            if not subject.is_active:
+                subject.is_active = True
             subject.consent_granted = True
             subject.consent_timestamp = datetime.utcnow()
+            await session.flush()
 
         digest = hashlib.sha256(embedding.tobytes()).hexdigest()
         duplicate_result = await session.execute(
@@ -285,8 +299,14 @@ class FaceRuntime:
                 BiometricTemplate.template_hash == digest,
             )
         )
-        if duplicate_result.scalars().first() is not None:
-            return subject, result, False
+        existing_template = duplicate_result.scalars().first()
+        if existing_template is not None:
+            # Re-register into active in-memory search galleries
+            self.gallery.add_vector(embedding, subject_id)
+            self.realtime_gallery.enroll(subject_id, subject_id, embedding)
+            self.status.template_count = max(self.status.template_count, 1)
+            self.status.subject_count = max(self.status.subject_count, 1)
+            return subject, result, True
 
         template = BiometricTemplate(
             subject_id=subject.id,

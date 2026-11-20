@@ -36,7 +36,9 @@ class AuthenticationService:
         if face_bytes:
             try:
                 embedding, extraction = face_runtime.extract(face_bytes)
-                subject_id, similarity = face_runtime.search(embedding)
+                subject_id, similarity = face_runtime.search(
+                    embedding, target_subject_id=claimed_subject_id
+                )
                 is_match = (
                     subject_id is not None
                     and similarity is not None
