@@ -62,11 +62,21 @@ class AuthenticationService:
                     face_result.pad_spoof_score = pad["spoof_score"]
                     face_result.pad_state = pad["pad_state"]
                     face_result.pad_provider = pad["provider"]
-                    face_result.reason_codes.append(
-                        "FACE_PAD_THRESHOLD_UNCALIBRATED"
-                        if pad["pad_state"] == "uncertain"
-                        else f"FACE_PAD_{str(pad['pad_state']).upper()}"
-                    )
+                    if pad["pad_state"] == "attack":
+                        face_result.identity = None
+                        face_result.recognition_state = "spoof_attack_detected"
+                        face_result.reason_codes.extend([
+                            "FACE_PAD_ATTACK",
+                            "FACE_PAD_RISK",
+                            "FACE_ATTACK_BLOCKED",
+                            "BIOMETRIC_SPOOF_REJECTED",
+                        ])
+                    elif pad["pad_state"] == "bona_fide":
+                        face_result.reason_codes.append("FACE_PAD_BONA_FIDE")
+                    elif pad["pad_state"] == "uncertain":
+                        face_result.reason_codes.append("FACE_PAD_UNCERTAIN")
+                    else:
+                        face_result.reason_codes.append("FACE_PAD_THRESHOLD_UNCALIBRATED")
                 except ModelUnavailableError:
                     face_result.reason_codes.append("FACE_PAD_UNAVAILABLE")
                 except FaceRecognitionError:

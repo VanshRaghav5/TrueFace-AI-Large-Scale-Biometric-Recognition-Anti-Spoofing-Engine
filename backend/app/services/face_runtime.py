@@ -1,10 +1,11 @@
 """Application runtime for the existing ArcFace/SCRFD recognition engine."""
 
 import hashlib
+import time
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 from sqlalchemy import select
@@ -15,7 +16,12 @@ from ..db.models.subject import Subject
 from ..db.models.template import BiometricTemplate
 from ..face.recognition.arcface_engine import ArcFaceEngine, EmbeddingResult
 from ..face.recognition.exceptions import FaceRecognitionError, ModelUnavailableError
-from ..face.liveness import AntiSpoofMn3Config, AntiSpoofMn3Engine
+from ..face.liveness import (
+    AntiSpoofMn3Config,
+    AntiSpoofMn3Engine,
+    MiniFASNetConfig,
+    MiniFASNetEnsemble,
+)
 from ..search.faiss_store import FAISSStore
 try:
     from backend.realtime.config import RealtimeConfig
@@ -42,7 +48,7 @@ class FaceRuntimeStatus:
     hydrated: bool = False
     pad_initialized: bool = False
     pad_error: Optional[str] = None
-    pad_model_name: str = "anti-spoof-mn3"
+    pad_model_name: str = "minifasnet_ensemble"
     pad_provider: Optional[str] = None
 
 
@@ -57,7 +63,7 @@ class FaceRuntime:
         self.gallery = FAISSStore(dimension=settings.VECTOR_DIMENSION)
         self.realtime_gallery = IdentityGallery(threshold=settings.FACE_MATCH_THRESHOLD)
         self.realtime: Optional[RealtimeRecognizer] = None
-        self.pad: Optional[AntiSpoofMn3Engine] = None
+        self.pad: Optional[Union[MiniFASNetEnsemble, AntiSpoofMn3Engine]] = None
         self.status = FaceRuntimeStatus(
             model_name=f"arcface_{settings.FACE_MODEL_PACK}"
         )
@@ -78,7 +84,7 @@ class FaceRuntime:
                 self.realtime_gallery,
                 RealtimeConfig(),
                 pad_adapter=self.pad,
-                pad_threshold=None,
+                pad_threshold=settings.FACE_LIVENESS_MIN_CONFIDENCE if self.pad else None,
             )
         except Exception as exc:
             self.status.initialized = False
@@ -93,6 +99,29 @@ class FaceRuntime:
         return Path(__file__).resolve().parents[3] / path
 
     def _initialize_pad(self) -> None:
+        # Check for Silent-Face-Anti-Spoofing MiniFASNet models first
+        v2_path = self._model_path(settings.FACE_LIVENESS_V2_PATH)
+        v1se_path = self._model_path(settings.FACE_LIVENESS_V1SE_PATH)
+        if v2_path.is_file() and v1se_path.is_file():
+            try:
+                ensemble = MiniFASNetEnsemble(
+                    MiniFASNetConfig(v2_path=v2_path, v1se_path=v1se_path)
+                )
+                ensemble.load_model()
+                self.pad = ensemble
+                self.status.pad_initialized = True
+                self.status.pad_error = None
+                self.status.pad_model_name = ensemble.config.model_name
+                self.status.pad_provider = ensemble.execution_provider
+                return
+            except Exception as exc:
+                self.pad = None
+                self.status.pad_initialized = False
+                self.status.pad_error = f"Failed to load MiniFASNet ensemble: {exc}"
+                self.status.pad_provider = None
+                return
+
+        # Fallback to single-model anti-spoof-mn3
         model_path = self._model_path(settings.FACE_LIVENESS_MODEL_PATH)
         if not model_path.is_file():
             self.pad = None
@@ -108,6 +137,7 @@ class FaceRuntime:
             self.pad = pad
             self.status.pad_initialized = True
             self.status.pad_error = None
+            self.status.pad_model_name = "anti-spoof-mn3"
             self.status.pad_provider = pad.execution_provider
         except Exception as exc:
             self.pad = None
@@ -193,6 +223,36 @@ class FaceRuntime:
         if len(faces) > 1:
             raise FaceRecognitionError("PAD evaluation requires exactly one face")
         face = faces[0]
+
+        threshold = settings.FACE_LIVENESS_MIN_CONFIDENCE
+        if isinstance(self.pad, MiniFASNetEnsemble):
+            started = time.perf_counter()
+            prediction = self.pad.predict_score(image, face.bounding_box)
+            inference_time_ms = (time.perf_counter() - started) * 1000.0
+            real_score = prediction.bona_fide_score
+            spoof_score = 1.0 - real_score
+            if real_score >= threshold:
+                pad_state = "bona_fide"
+            elif real_score <= 0.60:
+                pad_state = "attack"
+            else:
+                pad_state = "uncertain"
+
+            return {
+                "status": "available",
+                "face_detected": True,
+                "bounding_box": face.bounding_box,
+                "model_name": prediction.model_name,
+                "model_version": "silent-face-minifasnet",
+                "provider": self.pad.execution_provider or "CPUExecutionProvider",
+                "real_score": round(real_score, 4),
+                "spoof_score": round(spoof_score, 4),
+                "threshold": threshold,
+                "pad_state": pad_state,
+                "branch_scores": [round(s, 4) for s in prediction.branch_scores],
+                "inference_time_ms": round(inference_time_ms, 2),
+            }
+
         height, width = image.shape[:2]
         x1, y1, x2, y2 = face.bounding_box
         left, top = max(0, x1), max(0, y1)
@@ -200,7 +260,14 @@ class FaceRuntime:
         if right <= left or bottom <= top:
             raise FaceRecognitionError("Detected face crop is invalid")
         raw = self.pad.predict_raw(image[top:bottom, left:right])
-        threshold = None
+        real_score = raw.real_score
+        spoof_score = raw.spoof_score
+        if real_score >= threshold:
+            pad_state = "bona_fide"
+        elif real_score <= 0.50:
+            pad_state = "attack"
+        else:
+            pad_state = "uncertain"
         return {
             "status": "available",
             "face_detected": True,
@@ -208,11 +275,11 @@ class FaceRuntime:
             "model_name": raw.model_name,
             "model_version": raw.model_version,
             "provider": raw.execution_provider,
-            "real_score": raw.real_score,
-            "spoof_score": raw.spoof_score,
+            "real_score": round(real_score, 4),
+            "spoof_score": round(spoof_score, 4),
             "threshold": threshold,
-            "pad_state": "uncertain",
-            "inference_time_ms": raw.inference_time_ms,
+            "pad_state": pad_state,
+            "inference_time_ms": round(raw.inference_time_ms, 2),
         }
 
     @staticmethod

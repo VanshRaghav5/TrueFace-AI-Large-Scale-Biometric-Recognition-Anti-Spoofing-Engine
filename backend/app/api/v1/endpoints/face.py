@@ -22,7 +22,7 @@ async def verify_face(
         subject_id, similarity = face_runtime.search(
             embedding, target_subject_id=claimed_subject_id
         )
-        matched = (
+        identity_matched = (
             subject_id is not None
             and similarity is not None
             and similarity >= face_runtime_threshold()
@@ -30,28 +30,68 @@ async def verify_face(
         pad = None
         pad_reason_codes = ["FACE_PAD_UNAVAILABLE"]
         if face_runtime.status.pad_initialized:
-            pad = face_runtime.evaluate_pad(image_bytes)
-            pad_reason_codes = ["FACE_PAD_THRESHOLD_UNCALIBRATED"]
+            try:
+                pad = face_runtime.evaluate_pad(image_bytes)
+            except Exception:
+                pad = None
+                pad_reason_codes = ["FACE_PAD_EVALUATION_ERROR"]
+
+        pad_state = pad["pad_state"] if pad else "unavailable"
+        liveness_score = pad["real_score"] if pad else None
+        pad_spoof_score = pad["spoof_score"] if pad else None
+
+        if pad:
+            if pad_state == "bona_fide":
+                pad_reason_codes = ["FACE_PAD_BONA_FIDE"]
+            elif pad_state == "attack":
+                pad_reason_codes = [
+                    "FACE_PAD_ATTACK",
+                    "FACE_ATTACK_BLOCKED",
+                    "BIOMETRIC_SPOOF_REJECTED",
+                ]
+            elif pad_state == "uncertain":
+                pad_reason_codes = ["FACE_PAD_UNCERTAIN"]
+            else:
+                pad_reason_codes = ["FACE_PAD_THRESHOLD_UNCALIBRATED"]
+
+        # Coordination between Facial Recognition and Anti-Spoofing:
+        # Security Policy: Fail-safe. If spoof attack is detected, authentication MUST be blocked.
+        if pad_state == "attack":
+            matched = False
+            recognition_state = "spoof_attack_detected"
+            final_identity = None  # Do not authenticate or disclose identity on attack
+            reason_codes = (
+                ["IDENTITY_SPOOF_ATTEMPT" if identity_matched else "FACE_IDENTITY_UNKNOWN"]
+                + pad_reason_codes
+            )
+        elif identity_matched:
+            matched = True
+            recognition_state = "known"
+            final_identity = subject_id
+            reason_codes = ["FACE_IDENTITY_MATCH"] + pad_reason_codes
+        else:
+            matched = False
+            recognition_state = "unknown"
+            final_identity = None
+            reason_codes = ["FACE_IDENTITY_UNKNOWN"] + pad_reason_codes
+
         return FaceResult(
             status=ModalityStatus.AVAILABLE,
             face_detected=True,
             bounding_box=extraction.bounding_box,
-            identity=subject_id if matched else None,
-            recognition_state="known" if matched else "unknown",
+            identity=final_identity,
+            recognition_state=recognition_state,
             identity_similarity=(
                 max(0.0, float(similarity)) if similarity is not None else None
             ),
             model_name=extraction.model_name,
             providers=face_runtime.status.providers,
             processing_time_ms=round((time.perf_counter() - started) * 1000, 2),
-            liveness_score=pad["real_score"] if pad else None,
-            pad_spoof_score=pad["spoof_score"] if pad else None,
-            pad_state=pad["pad_state"] if pad else "unavailable",
+            liveness_score=liveness_score,
+            pad_spoof_score=pad_spoof_score,
+            pad_state=pad_state,
             pad_provider=pad["provider"] if pad else None,
-            reason_codes=(
-                ["FACE_IDENTITY_MATCH" if matched else "FACE_IDENTITY_UNKNOWN"]
-                + pad_reason_codes
-            ),
+            reason_codes=reason_codes,
         )
     except ModelUnavailableError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))

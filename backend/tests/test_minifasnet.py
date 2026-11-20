@@ -168,3 +168,25 @@ def test_orchestrator_rejects_invalid_score_and_classifies_uncertain():
     assert invalid.state is PadState.ERROR
     uncertain = orchestrator.classify_score(0.5, 0.5, 0.05)
     assert uncertain.state is PadState.UNCERTAIN
+
+
+def test_ensemble_predict_raw_and_provider_protocol(tmp_path):
+    paths = [tmp_path / "v2.onnx", tmp_path / "v1se.onnx"]
+    for path in paths:
+        path.write_bytes(b"test-only-placeholder")
+    engine = MiniFASNetEnsemble(
+        config(tmp_path),
+        session_factory=lambda path: FakeSession(
+            np.asarray([[0.0, 3.0, 0.0]])
+        ),
+    )
+    assert engine.execution_provider is None
+    engine.load_model()
+    assert engine.execution_provider == "CPUExecutionProvider"
+
+    raw = engine.predict_raw(np.zeros((100, 100, 3), dtype=np.uint8))
+    assert raw.real_score > 0.8
+    assert raw.spoof_score == pytest.approx(1.0 - raw.real_score)
+    assert raw.model_name == "minifasnet_ensemble"
+    assert raw.execution_provider == "CPUExecutionProvider"
+    assert raw.inference_time_ms >= 0.0

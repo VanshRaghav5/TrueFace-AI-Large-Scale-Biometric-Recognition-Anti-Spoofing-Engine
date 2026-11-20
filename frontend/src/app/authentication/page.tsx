@@ -19,7 +19,7 @@ interface FaceResultData {
   face_detected: boolean;
   bounding_box: [number, number, number, number] | null;
   identity: string | null;
-  recognition_state: "known" | "unknown";
+  recognition_state: string;
   identity_similarity: number | null;
   model_name: string;
   providers: string[];
@@ -160,7 +160,8 @@ export default function AuthenticationPage() {
     }
   }
 
-  const isMatched = result?.recognition_state === "known" && Boolean(result?.identity);
+  const isSpoofAttack = result?.pad_state === "attack" || result?.recognition_state === "spoof_attack_detected";
+  const isMatched = !isSpoofAttack && result?.recognition_state === "known" && Boolean(result?.identity);
   const similarityScore = result?.identity_similarity !== null && result?.identity_similarity !== undefined
     ? Number(result.identity_similarity)
     : null;
@@ -168,9 +169,9 @@ export default function AuthenticationPage() {
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold text-tf-text">Face Recognition & Verification</h1>
+        <h1 className="text-2xl font-bold text-tf-text">Face Recognition & Anti-Spoofing Verification</h1>
         <p className="text-sm text-tf-text-muted mt-1">
-          Perform 1:1 identity verification or 1:N open gallery recognition using InsightFace ArcFace embeddings.
+          Perform 1:1 identity verification or 1:N open gallery recognition with InsightFace ArcFace, coordinated with Silent-Face Anti-Spoofing MiniFASNet presentation attack detection.
         </p>
       </div>
 
@@ -303,13 +304,19 @@ export default function AuthenticationPage() {
                 {result && (
                   <div
                     className={`p-4 rounded-card border flex items-center justify-between ${
-                      isMatched
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-950"
-                        : "bg-rose-50 border-rose-200 text-rose-950"
+                      isSpoofAttack
+                        ? "bg-red-50 border-red-300 text-red-950 dark:bg-red-950/40 dark:border-red-900"
+                        : isMatched
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-950 dark:bg-emerald-950/40 dark:border-emerald-900"
+                        : "bg-rose-50 border-rose-200 text-rose-950 dark:bg-rose-950/40 dark:border-rose-900"
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      {isMatched ? (
+                      {isSpoofAttack ? (
+                        <div className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center animate-pulse">
+                          <ShieldAlert className="w-6 h-6" />
+                        </div>
+                      ) : isMatched ? (
                         <div className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center">
                           <UserCheck className="w-6 h-6" />
                         </div>
@@ -320,10 +327,18 @@ export default function AuthenticationPage() {
                       )}
                       <div>
                         <div className="text-sm font-bold uppercase tracking-wider">
-                          {isMatched ? "Identity Verified" : "Identity Unknown"}
+                          {isSpoofAttack
+                            ? "Spoof Attack Detected — Access Blocked"
+                            : isMatched
+                            ? "Identity Verified (Live Face)"
+                            : "Identity Unknown"}
                         </div>
-                        <div className="text-xs font-semibold">
-                          {isMatched ? `Subject: ${result.identity}` : "No match above threshold (0.75)"}
+                        <div className="text-xs font-semibold mt-0.5">
+                          {isSpoofAttack
+                            ? "Silent-Face Anti-Spoofing detected presentation attack. Biometric access denied."
+                            : isMatched
+                            ? `Subject: ${result.identity}`
+                            : "No match above threshold (0.75)"}
                         </div>
                       </div>
                     </div>
@@ -334,7 +349,7 @@ export default function AuthenticationPage() {
                 {similarityScore !== null && (
                   <div className="space-y-2 p-3 bg-tf-surface-muted rounded-input border border-tf-border">
                     <div className="flex justify-between text-xs">
-                      <span className="font-semibold text-tf-text">Cosine Similarity</span>
+                      <span className="font-semibold text-tf-text">Identity Cosine Similarity</span>
                       <span className="font-mono font-bold text-tf-primary">
                         {(similarityScore * 100).toFixed(2)}% ({(similarityScore).toFixed(4)})
                       </span>
@@ -389,22 +404,71 @@ export default function AuthenticationPage() {
 
                 {/* Liveness / PAD info */}
                 {result && (
-                  <div className="p-3 bg-tf-surface-muted rounded-input border border-tf-border text-xs space-y-1">
-                    <div className="text-tf-text-muted flex items-center gap-1 text-[11px]">
-                      <ShieldAlert className="w-3.5 h-3.5" /> Presentation Attack Detection (PAD)
+                  <div className={`p-3 rounded-input border text-xs space-y-2 ${
+                    isSpoofAttack
+                      ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900"
+                      : "bg-tf-surface-muted border-tf-border"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-tf-text flex items-center gap-1.5 font-semibold text-[11px]">
+                        <ShieldAlert className={`w-3.5 h-3.5 ${isSpoofAttack ? "text-red-600" : "text-tf-primary"}`} />
+                        Silent-Face Anti-Spoofing (PAD)
+                      </div>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                        result.pad_state === "bona_fide"
+                          ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                          : result.pad_state === "attack"
+                          ? "bg-red-100 text-red-800 border border-red-300 animate-pulse"
+                          : "bg-amber-100 text-amber-800 border border-amber-300"
+                      }`}>
+                        {result.pad_state === "bona_fide" ? "Live Face (Genuine)" : result.pad_state === "attack" ? "Spoof Attack" : result.pad_state}
+                      </span>
                     </div>
-                    <div className="font-semibold text-tf-text capitalize">
-                      State: {result.pad_state} {result.liveness_score !== null ? `(Score: ${(result.liveness_score * 100).toFixed(1)}%)` : ""}
-                    </div>
+
+                    {result.liveness_score !== null && (
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div className="p-2 bg-white/60 dark:bg-black/20 rounded border border-tf-border/50">
+                          <div className="text-[10px] text-tf-text-muted">Bona Fide (Real) Score</div>
+                          <div className="text-sm font-mono font-bold text-emerald-600">
+                            {(result.liveness_score * 100).toFixed(1)}%
+                          </div>
+                        </div>
+                        <div className="p-2 bg-white/60 dark:bg-black/20 rounded border border-tf-border/50">
+                          <div className="text-[10px] text-tf-text-muted">Spoof Attack Score</div>
+                          <div className={`text-sm font-mono font-bold ${
+                            (result.pad_spoof_score ?? 0) > 0.4 ? "text-red-600" : "text-tf-text-muted"
+                          }`}>
+                            {result.pad_spoof_score !== null ? `${(result.pad_spoof_score * 100).toFixed(1)}%` : "N/A"}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Standalone PAD result */}
                 {padResult && (
-                  <div className="p-3 bg-tf-surface-muted rounded-input border border-tf-border text-xs space-y-1">
-                    <div className="font-semibold text-tf-text">Direct Liveness Output:</div>
-                    <div className="text-[11px] font-mono text-tf-text-muted overflow-auto max-h-24">
-                      {JSON.stringify(padResult, null, 2)}
+                  <div className="p-3 bg-tf-surface-muted rounded-input border border-tf-border text-xs space-y-2">
+                    <div className="font-semibold text-tf-text flex items-center justify-between">
+                      <span>Silent-Face Anti-Spoofing Direct Output:</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                        padResult.pad_state === "bona_fide"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : padResult.pad_state === "attack"
+                          ? "bg-red-100 text-red-800"
+                          : "bg-amber-100 text-amber-800"
+                      }`}>
+                        {String(padResult.pad_state)}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div>Real Score: <span className="font-mono font-bold">{(Number(padResult.real_score) * 100).toFixed(1)}%</span></div>
+                      <div>Spoof Score: <span className="font-mono font-bold">{(Number(padResult.spoof_score) * 100).toFixed(1)}%</span></div>
+                      {Array.isArray(padResult.branch_scores) && (
+                        <div className="col-span-2 text-[10px] text-tf-text-muted">
+                          Branches: Scale 2.7: {(padResult.branch_scores[0] * 100).toFixed(1)}% | Scale 4.0: {(padResult.branch_scores[1] * 100).toFixed(1)}%
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -415,7 +479,13 @@ export default function AuthenticationPage() {
                     <div className="text-[11px] font-semibold text-tf-text-muted">Decision Evidence Codes:</div>
                     <div className="flex flex-wrap gap-1">
                       {result.reason_codes.map((code) => (
-                        <span key={code} className="px-2 py-0.5 bg-tf-border/50 text-tf-text rounded text-[10px] font-mono">
+                        <span key={code} className={`px-2 py-0.5 rounded text-[10px] font-mono ${
+                          code.includes("ATTACK") || code.includes("SPOOF")
+                            ? "bg-red-100 text-red-800 border border-red-200"
+                            : code.includes("MATCH") || code.includes("BONA_FIDE")
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            : "bg-tf-border/50 text-tf-text"
+                        }`}>
                           {code}
                         </span>
                       ))}

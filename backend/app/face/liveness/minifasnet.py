@@ -9,11 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import ceil, floor, isfinite
 from pathlib import Path
+import time
 from typing import Callable, Optional, Sequence
 
 import cv2
 import numpy as np
 
+from .antispoof_mn3 import AntiSpoofMn3RawResult
 from .exceptions import (
     PadInferenceError,
     PadInputError,
@@ -161,10 +163,21 @@ class MiniFASNetEnsemble:
                 f"Failed to load MiniFASNet ensemble: {exc}"
             ) from exc
 
+    @property
+    def execution_provider(self) -> Optional[str]:
+        if not self._sessions:
+            return None
+        session = self._sessions[0]
+        if hasattr(session, "get_providers"):
+            providers = session.get_providers()
+            if providers:
+                return str(providers[0])
+        return "CPUExecutionProvider"
+
     def predict_score(
         self,
         image_bgr: np.ndarray,
-        bounding_box: Sequence[int],
+        bounding_box: Sequence[float],
     ) -> MiniFASNetPrediction:
         if len(self._sessions) != 2:
             raise PadModelUnavailableError("MiniFASNet ensemble is not loaded")
@@ -189,4 +202,46 @@ class MiniFASNetEnsemble:
             bona_fide_score=float(np.mean(scores)),
             branch_scores=(scores[0], scores[1]),
             model_name=self.config.model_name,
+        )
+
+    def predict_raw(self, face_bgr: np.ndarray) -> AntiSpoofMn3RawResult:
+        """Evaluate pre-cropped face for PadAdapter protocol compatibility."""
+        if len(self._sessions) != 2:
+            raise PadModelUnavailableError("MiniFASNet ensemble is not loaded")
+        if not isinstance(face_bgr, np.ndarray) or face_bgr.size == 0:
+            raise PadInputError("Face crop must be a non-empty image")
+        if face_bgr.ndim != 3 or face_bgr.shape[2] != 3:
+            raise PadInputError("Face crop must be a BGR color image")
+        if not np.all(np.isfinite(face_bgr)):
+            raise PadInputError("Face crop contains non-finite values")
+
+        started = time.perf_counter()
+        crop = cv2.resize(
+            face_bgr,
+            (self.config.input_size, self.config.input_size),
+            interpolation=cv2.INTER_LINEAR,
+        )
+        scores: list[float] = []
+        for session in self._sessions:
+            try:
+                inputs = session.get_inputs()
+                if len(inputs) != 1:
+                    raise PadOutputContractError("MiniFASNet requires one input tensor")
+                output = session.run(None, {inputs[0].name: minifasnet_tensor(crop)})[0]
+                probabilities = _softmax_three_class(output)
+                scores.append(float(probabilities[0, self.config.bona_fide_class_index]))
+            except (PadInputError, PadOutputContractError):
+                raise
+            except Exception as exc:
+                raise PadInferenceError(f"MiniFASNet inference failed: {exc}") from exc
+
+        bona_fide_score = float(np.mean(scores))
+        latency = (time.perf_counter() - started) * 1000.0
+        return AntiSpoofMn3RawResult(
+            real_score=bona_fide_score,
+            spoof_score=float(1.0 - bona_fide_score),
+            model_name=self.config.model_name,
+            model_version="silent-face-minifasnet",
+            execution_provider=self.execution_provider or "CPUExecutionProvider",
+            inference_time_ms=latency,
         )
