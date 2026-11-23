@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { UserPlus, ShieldAlert, Camera, Upload, Trash2, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { UserPlus, ShieldAlert, Camera, Upload, Trash2, CheckCircle2, AlertCircle, RefreshCw, Mic, MicOff, Square } from "lucide-react";
 
 interface EnrolledItem {
   subject_id: string;
@@ -18,6 +18,8 @@ export default function EnrollmentPage() {
   const [consent, setConsent] = useState(false);
   const [subjectId, setSubjectId] = useState("");
   const [faceImage, setFaceImage] = useState<File | null>(null);
+  const [voiceSample, setVoiceSample] = useState<File | null>(null);
+  const [securityPin, setSecurityPin] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -28,6 +30,16 @@ export default function EnrollmentPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Voice recording state
+  const [useVoiceRecorder, setUseVoiceRecorder] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [voicePreviewUrl, setVoicePreviewUrl] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+
   // Registered subjects
   const [enrolledSubjects, setEnrolledSubjects] = useState<EnrolledItem[]>([]);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
@@ -36,6 +48,7 @@ export default function EnrollmentPage() {
     fetchEnrolledSubjects();
     return () => {
       stopCamera();
+      stopVoiceRecording();
     };
   }, []);
 
@@ -101,6 +114,125 @@ export default function EnrollmentPage() {
     }, "image/jpeg", 0.95);
   }
 
+  async function startVoiceRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      });
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+      setRecordingDuration(0);
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+      mediaRecorderRef.current = mediaRecorder;
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const webmBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        // Convert webm to wav using AudioContext for backend compatibility
+        try {
+          const arrayBuffer = await webmBlob.arrayBuffer();
+          const audioCtx = new AudioContext({ sampleRate: 16000 });
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          const wavBlob = audioBufferToWav(audioBuffer);
+          const file = new File([wavBlob], `voice_recording_${Date.now()}.wav`, { type: "audio/wav" });
+          setVoiceSample(file);
+          setVoicePreviewUrl(URL.createObjectURL(wavBlob));
+          await audioCtx.close();
+        } catch {
+          // Fallback: send webm as-is if wav conversion fails
+          const file = new File([webmBlob], `voice_recording_${Date.now()}.webm`, { type: "audio/webm" });
+          setVoiceSample(file);
+          setVoicePreviewUrl(URL.createObjectURL(webmBlob));
+        }
+      };
+
+      mediaRecorder.start(250);
+      setIsRecording(true);
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch {
+      setMessage({ text: "Microphone access was denied or is not available.", type: "error" });
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      audioStreamRef.current = null;
+    }
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setIsRecording(false);
+  }
+
+  function clearVoiceRecording() {
+    stopVoiceRecording();
+    setVoiceSample(null);
+    setVoicePreviewUrl(null);
+    setRecordingDuration(0);
+  }
+
+  function formatDuration(seconds: number): string {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  // Convert AudioBuffer to WAV Blob (PCM 16-bit mono)
+  function audioBufferToWav(buffer: AudioBuffer): Blob {
+    const numChannels = 1;
+    const sampleRate = buffer.sampleRate;
+    const format = 1; // PCM
+    const bitsPerSample = 16;
+    const channelData = buffer.getChannelData(0);
+    const dataLength = channelData.length * (bitsPerSample / 8);
+    const headerLength = 44;
+    const totalLength = headerLength + dataLength;
+    const arrayBuffer = new ArrayBuffer(totalLength);
+    const view = new DataView(arrayBuffer);
+
+    // WAV header
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+    writeString(0, "RIFF");
+    view.setUint32(4, totalLength - 8, true);
+    writeString(8, "WAVE");
+    writeString(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * (bitsPerSample / 8), true);
+    view.setUint16(32, numChannels * (bitsPerSample / 8), true);
+    view.setUint16(34, bitsPerSample, true);
+    writeString(36, "data");
+    view.setUint32(40, dataLength, true);
+
+    // PCM samples
+    let offset = 44;
+    for (let i = 0; i < channelData.length; i++) {
+      const sample = Math.max(-1, Math.min(1, channelData[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+
+    return new Blob([arrayBuffer], { type: "audio/wav" });
+  }
+
   async function submitEnrollment() {
     if (!subjectId.trim() || !faceImage || !consent) return;
     setSubmitting(true);
@@ -110,6 +242,12 @@ export default function EnrollmentPage() {
     form.append("subject_id", subjectId.trim());
     form.append("consent_confirmed", "true");
     form.append("face_image", faceImage);
+    if (voiceSample) {
+      form.append("voice_sample", voiceSample);
+    }
+    if (securityPin.trim()) {
+      form.append("security_pin", securityPin.trim());
+    }
 
     try {
       const response = await fetch(`${apiBase}/enrollment`, {
@@ -122,11 +260,14 @@ export default function EnrollmentPage() {
       }
 
       setMessage({
-        text: `Subject "${subjectId}" successfully enrolled! (${payload.detail ?? "Face template saved"})`,
+        text: `Subject "${subjectId}" successfully enrolled! (${payload.detail ?? "Credentials saved"})`,
         type: "success",
       });
       setSubjectId("");
       setFaceImage(null);
+      setVoiceSample(null);
+      setVoicePreviewUrl(null);
+      setSecurityPin("");
       setPreview(null);
       setConsent(false);
       fetchEnrolledSubjects();
@@ -253,6 +394,131 @@ export default function EnrollmentPage() {
                 <img src={preview} alt="Selected face preview" className="max-h-48 w-full rounded-input object-contain" />
               </div>
             )}
+
+            <div>
+              <label className="block text-sm font-medium text-tf-text mb-2">
+                Voice Biometric Sample <span className="text-xs text-tf-text-muted">(optional)</span>
+              </label>
+              <div className="flex gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isRecording) stopVoiceRecording();
+                    setUseVoiceRecorder(false);
+                  }}
+                  className={`flex-1 py-2 px-3 rounded-input text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors ${
+                    !useVoiceRecorder
+                      ? "bg-tf-primary text-white border-tf-primary"
+                      : "bg-tf-surface text-tf-text border-tf-border hover:bg-tf-surface-muted"
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" /> Upload .wav
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseVoiceRecorder(true)}
+                  className={`flex-1 py-2 px-3 rounded-input text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors ${
+                    useVoiceRecorder
+                      ? "bg-tf-primary text-white border-tf-primary"
+                      : "bg-tf-surface text-tf-text border-tf-border hover:bg-tf-surface-muted"
+                  }`}
+                >
+                  <Mic className="w-3.5 h-3.5" /> Live Record
+                </button>
+              </div>
+
+              {useVoiceRecorder ? (
+                <div className="space-y-2">
+                  <div className="relative rounded-input overflow-hidden bg-tf-surface-muted border border-tf-border p-4">
+                    <div className="flex flex-col items-center justify-center space-y-3">
+                      {isRecording ? (
+                        <>
+                          <div className="relative">
+                            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center animate-pulse">
+                              <Mic className="w-8 h-8 text-red-600" />
+                            </div>
+                            <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 animate-ping" />
+                          </div>
+                          <div className="text-sm font-mono font-bold text-red-600">{formatDuration(recordingDuration)}</div>
+                          <p className="text-[11px] text-tf-text-muted">Recording... Speak clearly into your microphone</p>
+                          <button
+                            type="button"
+                            onClick={stopVoiceRecording}
+                            className="py-2 px-6 bg-red-600 text-white rounded-input text-xs font-medium flex items-center gap-1.5 hover:bg-red-700 transition-colors"
+                          >
+                            <Square className="w-3.5 h-3.5" /> Stop Recording
+                          </button>
+                        </>
+                      ) : voiceSample && voicePreviewUrl ? (
+                        <>
+                          <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                          </div>
+                          <p className="text-xs font-semibold text-emerald-700">Voice Sample Recorded ({formatDuration(recordingDuration)})</p>
+                          <audio controls src={voicePreviewUrl} className="w-full max-w-xs" />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={clearVoiceRecording}
+                              className="py-1.5 px-4 border border-tf-border text-tf-text hover:bg-tf-surface-muted rounded-input text-xs font-medium transition-colors"
+                            >
+                              <Trash2 className="w-3 h-3 inline mr-1" /> Discard
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { clearVoiceRecording(); startVoiceRecording(); }}
+                              className="py-1.5 px-4 border border-tf-border text-tf-text hover:bg-tf-surface-muted rounded-input text-xs font-medium transition-colors"
+                            >
+                              <RefreshCw className="w-3 h-3 inline mr-1" /> Re-record
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-16 h-16 rounded-full bg-tf-surface flex items-center justify-center border-2 border-dashed border-tf-border">
+                            <Mic className="w-8 h-8 text-tf-text-muted" />
+                          </div>
+                          <p className="text-xs text-tf-text-muted">Click below to start recording your voice</p>
+                          <button
+                            type="button"
+                            onClick={startVoiceRecording}
+                            className="py-2 px-6 bg-tf-primary text-white rounded-input text-xs font-medium flex items-center gap-1.5 hover:bg-tf-primary-hover transition-colors"
+                          >
+                            <Mic className="w-3.5 h-3.5" /> Start Recording
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-tf-text-muted">Speak for 3-10 seconds for best speaker verification accuracy. Auto-converts to WAV.</p>
+                </div>
+              ) : (
+                <div>
+                  <input
+                    type="file"
+                    accept="audio/wav,audio/x-wav"
+                    onChange={(e) => { setVoiceSample(e.target.files?.[0] ?? null); setVoicePreviewUrl(null); }}
+                    className="block w-full text-xs text-tf-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-input file:border-0 file:text-xs file:font-medium file:bg-tf-surface-muted file:text-tf-text hover:file:bg-tf-border"
+                  />
+                  {voiceSample && <div className="text-[11px] text-emerald-600 font-mono mt-1">Loaded: {voiceSample.name}</div>}
+                </div>
+              )}
+              <p className="text-[11px] text-tf-text-muted mt-0.5">Used for speaker verification and synthetic speech anti-spoofing.</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-tf-text">
+                Security PIN / Final Secret Code <span className="text-xs text-tf-text-muted">(Optional / Recommended)</span>
+              </label>
+              <input
+                type="password"
+                value={securityPin}
+                onChange={(e) => setSecurityPin(e.target.value)}
+                placeholder="e.g. 482910 or custom passcode"
+                className="mt-1 block w-full rounded-input border border-tf-border bg-tf-surface px-3 py-2 text-sm focus:outline-none focus:border-tf-primary"
+              />
+              <p className="text-[11px] text-tf-text-muted mt-0.5">Enforces final possession/knowledge factor before access is granted.</p>
+            </div>
 
             <div className="flex items-start gap-2 pt-2">
               <input

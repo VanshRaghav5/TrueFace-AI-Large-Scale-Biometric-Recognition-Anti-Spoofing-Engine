@@ -54,8 +54,35 @@ async def verify_face(
             else:
                 pad_reason_codes = ["FACE_PAD_THRESHOLD_UNCALIBRATED"]
 
-        # Coordination between Facial Recognition and Anti-Spoofing:
-        # Security Policy: Fail-safe. If spoof attack is detected, authentication MUST be blocked.
+        deepfake = None
+        deepfake_reason_codes = ["FACE_DEEPFAKE_UNAVAILABLE"]
+        if face_runtime.status.deepfake_initialized:
+            try:
+                deepfake = face_runtime.evaluate_deepfake(image_bytes)
+            except Exception:
+                deepfake = None
+                deepfake_reason_codes = ["FACE_DEEPFAKE_EVALUATION_ERROR"]
+
+        deepfake_state = deepfake["deepfake_state"] if deepfake else "unavailable"
+        deepfake_score = deepfake["authenticity_score"] if deepfake else None
+        deepfake_manipulation_score = deepfake["manipulation_score"] if deepfake else None
+
+        if deepfake:
+            if deepfake_state == "authentic":
+                deepfake_reason_codes = ["FACE_DEEPFAKE_AUTHENTIC"]
+            elif deepfake_state == "manipulated" or deepfake.get("is_deepfake"):
+                deepfake_reason_codes = [
+                    "FACE_DEEPFAKE_MANIPULATION_DETECTED",
+                    "FACE_DEEPFAKE_BLOCKED",
+                    "FACE_MANIPULATION_RISK",
+                ]
+            elif deepfake_state == "uncertain":
+                deepfake_reason_codes = ["FACE_DEEPFAKE_UNCERTAIN"]
+            else:
+                deepfake_reason_codes = ["FACE_DEEPFAKE_THRESHOLD_UNCALIBRATED"]
+
+        # Coordination between Facial Recognition, Anti-Spoofing, and Deepfake Detection:
+        # Security Policy: Fail-safe Zero-Trust. Presentation attack or Deepfake blocks authentication.
         if pad_state == "attack":
             matched = False
             recognition_state = "spoof_attack_detected"
@@ -63,17 +90,27 @@ async def verify_face(
             reason_codes = (
                 ["IDENTITY_SPOOF_ATTEMPT" if identity_matched else "FACE_IDENTITY_UNKNOWN"]
                 + pad_reason_codes
+                + deepfake_reason_codes
+            )
+        elif deepfake_state == "manipulated" or (deepfake and deepfake.get("is_deepfake")):
+            matched = False
+            recognition_state = "deepfake_detected"
+            final_identity = None  # Do not authenticate or disclose identity on deepfake
+            reason_codes = (
+                ["IDENTITY_MANIPULATION_ATTEMPT" if identity_matched else "FACE_IDENTITY_UNKNOWN"]
+                + pad_reason_codes
+                + deepfake_reason_codes
             )
         elif identity_matched:
             matched = True
             recognition_state = "known"
             final_identity = subject_id
-            reason_codes = ["FACE_IDENTITY_MATCH"] + pad_reason_codes
+            reason_codes = ["FACE_IDENTITY_MATCH"] + pad_reason_codes + deepfake_reason_codes
         else:
             matched = False
             recognition_state = "unknown"
             final_identity = None
-            reason_codes = ["FACE_IDENTITY_UNKNOWN"] + pad_reason_codes
+            reason_codes = ["FACE_IDENTITY_UNKNOWN"] + pad_reason_codes + deepfake_reason_codes
 
         return FaceResult(
             status=ModalityStatus.AVAILABLE,
@@ -91,6 +128,10 @@ async def verify_face(
             pad_spoof_score=pad_spoof_score,
             pad_state=pad_state,
             pad_provider=pad["provider"] if pad else None,
+            deepfake_score=deepfake_score,
+            deepfake_manipulation_score=deepfake_manipulation_score,
+            deepfake_state=deepfake_state,
+            deepfake_provider=deepfake["provider"] if deepfake else None,
             reason_codes=reason_codes,
         )
     except ModelUnavailableError as exc:
@@ -136,9 +177,15 @@ async def process_live_frame(frame: UploadFile = File(...)):
 
 @router.post("/deepfake")
 async def evaluate_deepfake(face_image: UploadFile = File(...)):
-    return {
-        "status": ModalityStatus.MODEL_UNAVAILABLE,
-        "authenticity_probability": None,
-        "manipulation_detected": None,
-        "reason_codes": ["FACE_DEEPFAKE_MODEL_UNAVAILABLE"],
-    }
+    try:
+        return face_runtime.evaluate_deepfake(await face_image.read())
+    except ModelUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        )
+    except (InvalidImageError, FaceRecognitionError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )

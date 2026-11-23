@@ -22,6 +22,10 @@ from ..face.liveness import (
     MiniFASNetConfig,
     MiniFASNetEnsemble,
 )
+from ..face.deepfake import (
+    DeepfakeDetectorConfig,
+    DeepfakeDetectorEngine,
+)
 from ..search.faiss_store import FAISSStore
 try:
     from backend.realtime.config import RealtimeConfig
@@ -50,6 +54,10 @@ class FaceRuntimeStatus:
     pad_error: Optional[str] = None
     pad_model_name: str = "minifasnet_ensemble"
     pad_provider: Optional[str] = None
+    deepfake_initialized: bool = False
+    deepfake_error: Optional[str] = None
+    deepfake_model_name: str = "deepfakebench_mesonet"
+    deepfake_provider: Optional[str] = None
 
 
 class FaceRuntime:
@@ -64,6 +72,7 @@ class FaceRuntime:
         self.realtime_gallery = IdentityGallery(threshold=settings.FACE_MATCH_THRESHOLD)
         self.realtime: Optional[RealtimeRecognizer] = None
         self.pad: Optional[Union[MiniFASNetEnsemble, AntiSpoofMn3Engine]] = None
+        self.deepfake: Optional[DeepfakeDetectorEngine] = None
         self.status = FaceRuntimeStatus(
             model_name=f"arcface_{settings.FACE_MODEL_PACK}"
         )
@@ -79,6 +88,7 @@ class FaceRuntime:
             self.status.error = None
             self.status.providers = tuple(self.engine.active_providers)
             self._initialize_pad()
+            self._initialize_deepfake()
             self.realtime = RealtimeRecognizer(
                 self.engine,
                 self.realtime_gallery,
@@ -144,6 +154,33 @@ class FaceRuntime:
             self.status.pad_initialized = False
             self.status.pad_error = str(exc)
             self.status.pad_provider = None
+
+    def _initialize_deepfake(self) -> None:
+        model_path = self._model_path(settings.FACE_DEEPFAKE_MODEL_PATH)
+        if not model_path.is_file():
+            self.deepfake = None
+            self.status.deepfake_initialized = False
+            self.status.deepfake_error = None
+            self.status.deepfake_provider = None
+            return
+        try:
+            deepfake = DeepfakeDetectorEngine(
+                DeepfakeDetectorConfig(
+                    model_path=model_path,
+                    min_authenticity_threshold=settings.FACE_DEEPFAKE_MIN_AUTHENTICITY,
+                )
+            )
+            deepfake.load_model()
+            self.deepfake = deepfake
+            self.status.deepfake_initialized = True
+            self.status.deepfake_error = None
+            self.status.deepfake_model_name = deepfake.config.model_name
+            self.status.deepfake_provider = deepfake.execution_provider
+        except Exception as exc:
+            self.deepfake = None
+            self.status.deepfake_initialized = False
+            self.status.deepfake_error = str(exc)
+            self.status.deepfake_provider = None
 
     async def hydrate(self, session: AsyncSession) -> None:
         """Rebuild the searchable gallery from database-backed templates."""
@@ -282,6 +319,35 @@ class FaceRuntime:
             "inference_time_ms": round(raw.inference_time_ms, 2),
         }
 
+    def evaluate_deepfake(self, image_bytes: bytes) -> dict:
+        self._require_ready()
+        if self.deepfake is None:
+            raise ModelUnavailableError(
+                self.status.deepfake_error or "Deepfake detection model is unavailable"
+            )
+        image = self.engine.load_image_from_bytes(image_bytes)
+        faces = self.engine.detect_faces(image)
+        if len(faces) == 0:
+            raise FaceRecognitionError("No face detected for deepfake evaluation")
+        if len(faces) > 1:
+            raise FaceRecognitionError("Deepfake evaluation requires exactly one face")
+        face = faces[0]
+        prediction = self.deepfake.predict_image(image, face.bounding_box)
+        return {
+            "status": "available",
+            "face_detected": True,
+            "bounding_box": face.bounding_box,
+            "model_name": prediction.model_name,
+            "model_version": prediction.model_version,
+            "provider": prediction.execution_provider,
+            "authenticity_score": prediction.authenticity_score,
+            "manipulation_score": prediction.manipulation_score,
+            "deepfake_state": prediction.deepfake_state,
+            "is_deepfake": prediction.is_deepfake,
+            "threshold": self.deepfake.config.min_authenticity_threshold,
+            "inference_time_ms": prediction.inference_time_ms,
+        }
+
     @staticmethod
     def _validate_embedding(embedding: np.ndarray) -> np.ndarray:
         vector = np.asarray(embedding, dtype=np.float32).reshape(-1)
@@ -373,7 +439,7 @@ class FaceRuntime:
             self.realtime_gallery.enroll(subject_id, subject_id, embedding)
             self.status.template_count = max(self.status.template_count, 1)
             self.status.subject_count = max(self.status.subject_count, 1)
-            return subject, result, True
+            return subject, result, False
 
         template = BiometricTemplate(
             subject_id=subject.id,

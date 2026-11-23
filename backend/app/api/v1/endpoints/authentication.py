@@ -15,6 +15,7 @@ async def verify_biometrics(
     claimed_subject_id: Optional[str] = Form(None),
     face_image: Optional[UploadFile] = File(None),
     voice_sample: Optional[UploadFile] = File(None),
+    security_pin: Optional[str] = Form(None),
     session: AsyncSession = Depends(get_db),
 ):
     try:
@@ -24,7 +25,9 @@ async def verify_biometrics(
         result = await auth_service.verify(
             claimed_subject_id=claimed_subject_id,
             face_bytes=face_bytes,
-            voice_bytes=voice_bytes
+            voice_bytes=voice_bytes,
+            security_pin=security_pin,
+            session=session,
         )
 
         # Asynchronously record audit event

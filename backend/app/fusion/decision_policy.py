@@ -47,9 +47,21 @@ class DecisionPolicy:
             reasons.append("MODALITY_MISSING")
             return DecisionOutcome.BLOCK, list(set(reasons))
 
-        # 3. Check authenticity / spoofing risk (presentation attack or synthetic audio)
-        authenticity_risks = {"FACE_PAD_RISK", "FACE_MANIPULATION_RISK", "AUDIO_SPOOF_RISK"}
+        # 3. Check authenticity / spoofing risk (presentation attack, deepfake, or synthetic audio)
+        authenticity_risks = {
+            "FACE_PAD_RISK",
+            "FACE_PAD_ATTACK",
+            "FACE_MANIPULATION_RISK",
+            "FACE_DEEPFAKE_MANIPULATION_DETECTED",
+            "AUDIO_SPOOF_RISK",
+            "VOICE_SYNTHETIC_SPEECH_DETECTED",
+        }
         if any(r in authenticity_risks for r in reasons) or fused_authenticity_score < self.min_authenticity_threshold:
+            return DecisionOutcome.BLOCK, list(set(reasons))
+
+        # 4. Check security code / PIN failure
+        security_pin_blocks = {"SECURITY_CODE_MISMATCH", "SECURITY_CODE_REQUIRED"}
+        if any(r in security_pin_blocks for r in reasons):
             return DecisionOutcome.BLOCK, list(set(reasons))
 
         # 4. Check for modality signal conflict

@@ -33,7 +33,9 @@ class Settings(BaseSettings):
     FACE_LIVENESS_MODEL_PATH: str = "models/liveness/anti-spoof-mn3.onnx"
     FACE_LIVENESS_V2_PATH: str = "models/liveness/2.7_80x80_MiniFASNetV2.onnx"
     FACE_LIVENESS_V1SE_PATH: str = "models/liveness/4_0_0_80x80_MiniFASNetV1SE.onnx"
-    FACE_DEEPFAKE_MODEL_PATH: str = "models/deepfake/manipulation_model.onnx"
+    FACE_DEEPFAKE_MODEL_PATH: str = "models/deepfake/deepfake_detector.onnx"
+    FACE_DEEPFAKE_MIN_AUTHENTICITY: float = 0.75
+    REQUIRE_SECURITY_PIN: bool = True
 
     FACE_MATCH_THRESHOLD: float = 0.75
     VOICE_MATCH_THRESHOLD: float = 0.70

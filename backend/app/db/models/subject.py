@@ -12,5 +12,6 @@ class Subject(Base):
     consent_granted = Column(Boolean, nullable=False, default=False)
     consent_timestamp = Column(DateTime, nullable=False, default=datetime.utcnow)
     is_active = Column(Boolean, nullable=False, default=True)
+    security_pin_hash = Column(String(128), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 

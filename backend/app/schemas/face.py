@@ -33,5 +33,8 @@ class FaceResult(BaseModel):
     pad_state: Optional[str] = None
     pad_provider: Optional[str] = None
     deepfake_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Genuineness probability (1.0 = real)")
+    deepfake_manipulation_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Manipulation probability (1.0 = deepfake)")
+    deepfake_state: Optional[str] = None
+    deepfake_provider: Optional[str] = None
     quality: Optional[FaceQualityMetrics] = None
     reason_codes: List[str] = Field(default_factory=list)

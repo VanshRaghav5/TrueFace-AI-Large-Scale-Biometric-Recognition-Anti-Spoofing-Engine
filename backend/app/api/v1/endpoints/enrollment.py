@@ -5,6 +5,17 @@ from ....services.enrollment_service import EnrollmentService
 from ....core.exceptions import ConsentRequiredError
 from ....core.exceptions import ModelUnavailableError
 from ....db.database import get_db
+from ....face.recognition.exceptions import (
+    FaceNotDetectedError,
+    InvalidImageError,
+    MultipleFacesDetectedError,
+)
+from ....face.recognition.exceptions import (
+    FaceRecognitionError,
+)
+from ....face.recognition.exceptions import (
+    ModelUnavailableError as FaceModelUnavailableError,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
@@ -16,8 +27,15 @@ async def enroll_subject(
     consent_confirmed: bool = Form(...),
     face_image: Optional[UploadFile] = File(None),
     voice_sample: Optional[UploadFile] = File(None),
+    security_pin: Optional[str] = Form(None),
     session: AsyncSession = Depends(get_db),
 ):
+    if face_image is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A face image is required for face enrollment",
+        )
+
     try:
         face_bytes = await face_image.read() if face_image else None
         voice_bytes = await voice_sample.read() if voice_sample else None
@@ -27,17 +45,31 @@ async def enroll_subject(
             consent_confirmed=consent_confirmed,
             session=session,
             face_bytes=face_bytes,
-            voice_bytes=voice_bytes
+            voice_bytes=voice_bytes,
+            security_pin=security_pin,
         )
         return result
     except ConsentRequiredError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except ModelUnavailableError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
+    except FaceModelUnavailableError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
-    except Exception as e:
+    except (
+        InvalidImageError,
+        FaceNotDetectedError,
+        MultipleFacesDetectedError,
+        FaceRecognitionError,
+        ValueError,
+    ) as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Enrollment processing failed",
+        ) from e
 
 
 @router.get("/enrollment")
