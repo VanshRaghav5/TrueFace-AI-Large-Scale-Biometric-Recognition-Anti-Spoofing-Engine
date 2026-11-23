@@ -4,6 +4,7 @@ from pathlib import Path
 from sqlalchemy import text
 from ....db.database import get_session_factory
 from ....services.face_runtime import face_runtime
+from ....voice.voice_runtime import voice_runtime
 
 router = APIRouter()
 
@@ -63,8 +64,21 @@ async def get_health():
                 "error": face_runtime.status.pad_error,
             },
             "face_deepfake": "configured" if deepfake_path.is_file() else "unavailable",
-            "voice_vad": "unavailable",
-            "voice_recognizer": "unavailable",
-            "voice_antispoof": "unavailable"
+            "voice": {
+                "status": "ready" if voice_runtime.status.initialized else "unavailable",
+                "recognizer": "ready" if voice_runtime.status.initialized else "unavailable",
+                "antispoof": "ready" if voice_runtime.status.antispoof_initialized else "fallback",
+                "vad": "ready",
+                "model_name": voice_runtime.status.model_name,
+                "model_version": voice_runtime.status.model_version,
+                "embedding_dimension": voice_runtime.status.dimension,
+                "model_source": voice_runtime.status.model_source,
+                "error": voice_runtime.status.error,
+                "antispoof_model_name": voice_runtime.status.antispoof_model_name,
+                "antispoof_error": voice_runtime.status.antispoof_error,
+            },
+            "voice_recognizer": "ready" if voice_runtime.status.initialized else "unavailable",
+            "voice_antispoof": "ready" if voice_runtime.status.antispoof_initialized else "fallback",
+            "voice_vad": "ready",
         }
     }

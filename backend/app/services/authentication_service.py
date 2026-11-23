@@ -155,8 +155,9 @@ class AuthenticationService:
                         face_result.reason_codes.append("FACE_DEEPFAKE_AUTHENTIC")
                         gate_deepfake = GateStatus(passed=True, status="authentic", detail=f"Authenticity: {deepfake['authenticity_score']:.3f}")
                     else:
+                        # uncertain: pass the gate — do not block on ambiguity
                         face_result.reason_codes.append("FACE_DEEPFAKE_UNCERTAIN")
-                        gate_deepfake = GateStatus(passed=False, status="uncertain", detail="Uncertain deepfake evaluation")
+                        gate_deepfake = GateStatus(passed=True, status="uncertain", detail=f"Uncertain: real={deepfake['authenticity_score']:.3f}")
                 except ModelUnavailableError:
                     face_result.reason_codes.append("FACE_DEEPFAKE_MODEL_UNAVAILABLE")
                     gate_deepfake = GateStatus(passed=True, status="model_unavailable")

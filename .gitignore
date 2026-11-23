@@ -43,6 +43,7 @@ models/face/*
 !models/face/.gitkeep
 models/voice/*
 !models/voice/.gitkeep
+!models/voice/anti_spoofing/
 models/liveness/*
 !models/liveness/.gitkeep
 models/deepfake/*
@@ -56,6 +57,10 @@ models/audio_antispoof/*
 *.tflite
 *.h5
 *.safetensors
+
+# Voice anti-spoofing: AASIST pretrained weights are small (~1.2 MB) and tracked.
+!models/voice/anti_spoofing/AASIST.pth
+!models/voice/anti_spoofing/AASIST-L.pth
 
 # Biometric & Evaluation Datasets (Keep folders via .gitkeep)
 evaluation/datasets/face/*

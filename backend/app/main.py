@@ -6,6 +6,7 @@ from .core.logging import setup_logging, logger
 from .core.exceptions import BiometricException
 from .api.v1.router import api_router
 from .services.face_runtime import face_runtime
+from .voice.voice_runtime import voice_runtime
 from .db.database import get_session_factory
 
 setup_logging()
@@ -53,6 +54,28 @@ async def initialize_runtime() -> None:
                 await face_runtime.hydrate(session)
         except Exception as exc:
             face_runtime.status.hydration_error = f"Database gallery hydration failed: {exc}"
+
+    # Speaker verification model (SpeechBrain ECAPA-TDNN). A failure here must
+    # not keep the API from starting: voice requests degrade to an explicit
+    # ``model_unavailable`` state while face/PIN/fusion still work.
+    voice_status = voice_runtime.initialize()
+    if voice_status.initialized:
+        logger.info(
+            f"Voice runtime ready: {voice_status.model_name} "
+            f"({voice_status.dimension}-d embeddings)"
+        )
+    elif voice_status.error:
+        logger.warning(f"Voice runtime unavailable: {voice_status.error}")
+
+    if voice_status.antispoof_initialized:
+        logger.info(
+            f"Voice anti-spoofing ready: {voice_status.antispoof_model_name}"
+        )
+    elif voice_status.antispoof_error:
+        logger.warning(
+            f"Voice anti-spoofing unavailable (heuristic fallback active): "
+            f"{voice_status.antispoof_error}"
+        )
 
 @app.get("/")
 async def root():

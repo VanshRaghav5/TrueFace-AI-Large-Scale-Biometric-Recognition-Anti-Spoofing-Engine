@@ -26,7 +26,7 @@ async def verify_voice(
 async def evaluate_antispoof(voice_sample: UploadFile = File(...)):
     try:
         content = await voice_sample.read()
-        return voice_runtime.evaluate_antispoof(content)
+        return await voice_runtime.evaluate_antispoof(content)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

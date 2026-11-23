@@ -44,6 +44,25 @@ class Settings(BaseSettings):
     FUSION_WEIGHT_FACE: float = 0.60
     FUSION_WEIGHT_VOICE: float = 0.40
 
+    # Voice / speaker verification (SpeechBrain ECAPA-TDNN, VoxCeleb)
+    # The speaker encoder is downloaded once from HuggingFace into
+    # VOICE_SPEAKER_MODEL_PATH (gitignored) and reused for all inference.
+    VOICE_SPEAKER_ENABLED: bool = True
+    VOICE_SPEAKER_HF_SOURCE: str = "speechbrain/spkrec-ecapa-voxceleb"
+    VOICE_SPEAKER_MODEL_PATH: str = "models/voice/speaker_verification"
+    VOICE_SPEAKER_DEVICE: str = "cpu"
+    VOICE_EMBEDDING_DIMENSION: int = 192
+    VOICE_INFERENCE_TIMEOUT: float = 10.0
+
+    # Voice anti-spoofing (AASIST, pretrained on ASVspoof 2019 LA)
+    # Pretrained weights are bundled at models/voice/anti_spoofing/AASIST.pth.
+    # When unavailable the system falls back to an acoustic-spectral heuristic
+    # (explicitly labeled in the result — never silent).
+    VOICE_ANTISPOOF_ENABLED: bool = True
+    VOICE_ANTISPOOF_MODEL_PATH: str = "models/voice/anti_spoofing/AASIST.pth"
+    VOICE_ANTISPOOF_DEVICE: str = "cpu"
+    VOICE_ANTISPOOF_THRESHOLD: float = 0.5  # bonafide softmax probability >= threshold
+
     LOG_LEVEL: str = "INFO"
     ENABLE_AUDIT_LOGGING: bool = True
     MASK_EMBEDDINGS_IN_LOGS: bool = True

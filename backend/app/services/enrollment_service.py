@@ -8,6 +8,7 @@ from ..core.security import hash_security_pin
 from ..schemas.enrollment import EnrollmentResponse
 from .face_runtime import face_runtime
 from ..voice.voice_runtime import voice_runtime
+from ..voice.speaker_verification.voice_engine import VoiceProcessingError
 from ..db.models.subject import Subject
 from ..db.models.template import BiometricTemplate
 from sqlalchemy import select
@@ -62,32 +63,39 @@ class EnrollmentService:
         )
 
         voice_enrolled = False
+        voice_skip_reason = None
         if voice_bytes:
-            voice_vec, _ = voice_runtime.extract(voice_bytes)
-            # Remove any previous voice template for this subject
-            existing_voice = await session.execute(
-                select(BiometricTemplate).where(
-                    BiometricTemplate.subject_id == subject.id,
-                    BiometricTemplate.modality == "VOICE",
+            try:
+                voice_vec, _ = voice_runtime.extract(voice_bytes)
+                # Remove any previous voice template for this subject
+                existing_voice = await session.execute(
+                    select(BiometricTemplate).where(
+                        BiometricTemplate.subject_id == subject.id,
+                        BiometricTemplate.modality == "VOICE",
+                    )
                 )
-            )
-            for v_tmpl in existing_voice.scalars().all():
-                await session.delete(v_tmpl)
+                for v_tmpl in existing_voice.scalars().all():
+                    await session.delete(v_tmpl)
 
-            voice_tmpl = BiometricTemplate(
-                id=uuid.uuid4(),
-                subject_id=subject.id,
-                modality="VOICE",
-                model_name=voice_runtime.model_name,
-                model_version=voice_runtime.model_version,
-                vector_store_index=None,
-                template_hash=hashlib.sha256(voice_vec.tobytes()).hexdigest(),
-                embedding=voice_vec.tobytes(),
-                embedding_dimension=voice_runtime.dimension,
-                created_at=datetime.utcnow(),
-            )
-            session.add(voice_tmpl)
-            voice_enrolled = True
+                voice_tmpl = BiometricTemplate(
+                    id=uuid.uuid4(),
+                    subject_id=subject.id,
+                    modality="VOICE",
+                    model_name=voice_runtime.model_name,
+                    model_version=voice_runtime.model_version,
+                    vector_store_index=None,
+                    template_hash=hashlib.sha256(voice_vec.tobytes()).hexdigest(),
+                    embedding=voice_vec.tobytes(),
+                    embedding_dimension=voice_runtime.dimension,
+                    created_at=datetime.utcnow(),
+                )
+                session.add(voice_tmpl)
+                voice_enrolled = True
+            except VoiceProcessingError as exc:
+                # Voice is an optional modality: a model that cannot run must
+                # never abort face enrollment. Record the reason instead of
+                # silently dropping the sample.
+                voice_skip_reason = str(exc)
 
         pin_enrolled = False
         if security_pin and security_pin.strip():
@@ -110,8 +118,25 @@ class EnrollmentService:
             voice_enrolled=voice_enrolled,
             pin_enrolled=pin_enrolled,
             template_count=total_templates,
-            detail=(
-                f"{result.model_name} enrolled. Multi-factor credentials registered."
-                if created else "Subject credentials updated successfully"
+            detail=_compose_detail(
+                created, result.model_name, voice_enrolled, voice_skip_reason
             ),
         )
+
+
+def _compose_detail(
+    created: bool,
+    face_model_name: str,
+    voice_enrolled: bool,
+    voice_skip_reason: Optional[str],
+) -> str:
+    base = (
+        f"{face_model_name} enrolled. Multi-factor credentials registered."
+        if created
+        else "Subject credentials updated successfully"
+    )
+    if voice_skip_reason:
+        return f"{base} (voice enrollment skipped: speaker model unavailable)"
+    if not voice_enrolled:
+        return base
+    return base

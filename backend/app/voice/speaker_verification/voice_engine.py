@@ -1,21 +1,28 @@
 """Speaker verification engine for TrueFaceAI.
 
-Extracts normalized acoustic spectral embeddings from audio samples
-and calculates cosine similarity against enrolled voice templates.
+Wraps the SpeechBrain ECAPA-TDNN speaker encoder (pretrained on VoxCeleb) to
+extract normalized speaker embeddings, and computes cosine similarity against
+enrolled voice templates.
+
+The model is loaded once (either eagerly at startup via ``initialize`` or
+lazily on first inference) and reused for every request. Per-request inference
+never triggers a reload. If the model cannot be loaded (e.g. the package is
+missing or the weights cannot be fetched) the embedder reports an explicit
+unavailable state instead of silently degrading.
 """
 
 from __future__ import annotations
 
 import io
 import math
-import struct
+import os
+import threading
 import wave
 from dataclasses import dataclass
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 from scipy import signal
-from scipy.fft import rfft
 
 
 class VoiceProcessingError(Exception):
@@ -28,6 +35,10 @@ class InvalidAudioError(VoiceProcessingError):
 
 class AudioQualityError(VoiceProcessingError):
     """Raised when audio quality does not meet minimum biometric standards."""
+
+
+class SpeakerModelUnavailableError(VoiceProcessingError):
+    """Raised when the speaker encoder model could not be loaded."""
 
 
 @dataclass(frozen=True)
@@ -104,78 +115,161 @@ def parse_wav_bytes(audio_bytes: bytes) -> Tuple[np.ndarray, int, AudioPropertie
     return samples, sample_rate, props
 
 
-def extract_acoustic_embedding(samples: np.ndarray, sample_rate: int, dim: int = 128) -> np.ndarray:
-    """Extract a 128-dimensional normalized acoustic filterbank embedding."""
-    if len(samples) == 0:
-        raise InvalidAudioError("Audio signal is empty")
+class SpeakerEmbedder:
+    """Owns one reusable SpeechBrain ECAPA-TDNN speaker encoder.
 
-    # Resample to 16kHz standard if necessary
-    target_sr = 16000
-    if sample_rate != target_sr:
-        num_target = int(len(samples) * target_sr / sample_rate)
-        if num_target > 0:
+    Loading is decoupled from inference: call :meth:`load` (or rely on the lazy
+    first-call load) to materialize the model, then :meth:`extract` for each
+    request. The model is downloaded from HuggingFace into ``savedir`` on first
+    use and read from disk afterwards.
+    """
+
+    MODEL_NAME = "ecapa_tdnn_voxceleb"
+    MODEL_VERSION = "v1"
+    TARGET_SAMPLE_RATE = 16000
+
+    def __init__(self, source: str, savedir: str, device: str = "cpu") -> None:
+        self.source = source
+        self.savedir = savedir
+        self.device = device
+        self._lock = threading.Lock()
+        self._model = None
+        self._dim: Optional[int] = None
+        self._error: Optional[str] = None
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._model is not None
+
+    @property
+    def dimension(self) -> int:
+        return self._dim if self._dim is not None else 192
+
+    @property
+    def error(self) -> Optional[str]:
+        return self._error
+
+    @property
+    def model_name(self) -> str:
+        return self.MODEL_NAME
+
+    @property
+    def model_version(self) -> str:
+        return self.MODEL_VERSION
+
+    def _resolve_savedir(self):
+        from pathlib import Path
+        from ...core.config import PROJECT_ROOT
+
+        path = Path(self.savedir)
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def load(self) -> None:
+        """Download and instantiate the speaker model. Thread-safe and idempotent."""
+        with self._lock:
+            if self._model is not None:
+                return
+            from ...core.config import settings
+
+            if not settings.VOICE_SPEAKER_ENABLED:
+                self._error = "Speaker verification model is disabled by configuration"
+                raise SpeakerModelUnavailableError(self._error)
+            try:
+                import torch  # noqa: F401  (ensures torch is importable early)
+                from speechbrain.inference.speaker import SpeakerRecognition
+                from speechbrain.utils.fetching import LocalStrategy
+            except ImportError as exc:
+                self._error = f"SpeechBrain is not installed: {exc.name or exc}"
+                raise SpeakerModelUnavailableError(self._error) from exc
+
+            # COPY avoids the Windows symlink privilege requirement (WinError 1314).
+            os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+            try:
+                save_dir = self._resolve_savedir()
+                self._model = SpeakerRecognition.from_hparams(
+                    source=self.source,
+                    savedir=str(save_dir),
+                    run_opts={"device": self.device},
+                    local_strategy=LocalStrategy.COPY,
+                )
+                self._error = None
+            except Exception as exc:
+                self._model = None
+                self._error = f"Failed to load speaker model '{self.source}': {exc}"
+                raise SpeakerModelUnavailableError(self._error) from exc
+
+    def _require_model(self):
+        if self._model is None:
+            self.load()
+        if self._model is None:
+            raise SpeakerModelUnavailableError(self._error or "Speaker model is unavailable")
+        return self._model
+
+    def extract(self, samples: np.ndarray, sample_rate: int) -> np.ndarray:
+        """Extract an L2-normalized speaker embedding from a 1D float32 waveform.
+
+        Returns a 1-D float32 array. The dimension is determined by the loaded
+        model (192 for ``spkrec-ecapa-voxceleb``).
+        """
+        if len(samples) == 0:
+            raise InvalidAudioError("Audio signal is empty")
+
+        import torch
+
+        if sample_rate != self.TARGET_SAMPLE_RATE:
+            num_target = int(len(samples) * self.TARGET_SAMPLE_RATE / sample_rate)
+            if num_target <= 0:
+                raise AudioQualityError("Audio is too short to resample")
             samples = signal.resample(samples, num_target)
-            sample_rate = target_sr
+            sample_rate = self.TARGET_SAMPLE_RATE
 
-    frame_size = 512
-    hop_size = 256
-    window = np.hanning(frame_size)
+        model = self._require_model()
+        wav = torch.from_numpy(np.ascontiguousarray(samples, dtype=np.float32)).unsqueeze(0)
+        wav_lens = torch.tensor([1.0])
+        with torch.no_grad():
+            embedding = model.encode_batch(wav, wav_lens, normalize=False)
+        vector = embedding.squeeze().detach().cpu().numpy().astype(np.float32).reshape(-1)
 
-    num_frames = max(1, (len(samples) - frame_size) // hop_size + 1)
-    mel_filters = 32
+        self._dim = int(vector.shape[0])
+        norm = float(np.linalg.norm(vector))
+        if norm < 1e-8:
+            raise VoiceProcessingError("Degenerate speaker embedding (zero norm)")
+        return (vector / norm).astype(np.float32)
 
-    # Mel-scale filterbank construction
-    low_freq = 100.0
-    high_freq = sample_rate / 2.0
-    mel_points = np.linspace(
-        2595 * np.log10(1 + low_freq / 700.0),
-        2595 * np.log10(1 + high_freq / 700.0),
-        mel_filters + 2,
-    )
-    hz_points = 700.0 * (10.0 ** (mel_points / 2595.0) - 1.0)
-    bin_points = np.floor((frame_size + 1) * hz_points / sample_rate).astype(int)
 
-    fbank = np.zeros((mel_filters, frame_size // 2 + 1), dtype=np.float32)
-    for m in range(1, mel_filters + 1):
-        f_m_minus = bin_points[m - 1]
-        f_m = bin_points[m]
-        f_m_plus = bin_points[m + 1]
-        for k in range(f_m_minus, f_m):
-            if f_m > f_m_minus:
-                fbank[m - 1, k] = (k - f_m_minus) / (f_m - f_m_minus)
-        for k in range(f_m, f_m_plus):
-            if f_m_plus > f_m:
-                fbank[m - 1, k] = (f_m_plus - k) / (f_m_plus - f_m)
+_embedder: Optional[SpeakerEmbedder] = None
+_embedder_lock = threading.Lock()
 
-    energies = []
-    for i in range(num_frames):
-        start = i * hop_size
-        block = samples[start : start + frame_size]
-        if len(block) < frame_size:
-            block = np.pad(block, (0, frame_size - len(block)))
-        spectrum = np.abs(rfft(block * window)) ** 2
-        filter_energies = np.dot(fbank, spectrum)
-        filter_energies = np.log(np.maximum(filter_energies, 1e-8))
-        energies.append(filter_energies)
 
-    energies_arr = np.array(energies)  # (num_frames, 32)
-    # Aggregate statistical moments: mean, std, skew/min, max -> 32 * 4 = 128-dim
-    mean_vec = np.mean(energies_arr, axis=0)
-    std_vec = np.std(energies_arr, axis=0)
-    min_vec = np.min(energies_arr, axis=0)
-    max_vec = np.max(energies_arr, axis=0)
+def get_speaker_embedder() -> SpeakerEmbedder:
+    """Return the process-wide :class:`SpeakerEmbedder` singleton."""
+    global _embedder
+    if _embedder is None:
+        with _embedder_lock:
+            if _embedder is None:
+                from ...core.config import settings
 
-    raw_embedding = np.concatenate([mean_vec, std_vec, min_vec, max_vec]).astype(np.float32)
-    if len(raw_embedding) != dim:
-        raw_embedding = np.resize(raw_embedding, dim)
+                _embedder = SpeakerEmbedder(
+                    source=settings.VOICE_SPEAKER_HF_SOURCE,
+                    savedir=settings.VOICE_SPEAKER_MODEL_PATH,
+                    device=settings.VOICE_SPEAKER_DEVICE,
+                )
+    return _embedder
 
-    norm = float(np.linalg.norm(raw_embedding))
-    if norm < 1e-8:
-        raw_embedding = np.ones(dim, dtype=np.float32) / math.sqrt(dim)
-    else:
-        raw_embedding = raw_embedding / norm
 
-    return raw_embedding.astype(np.float32)
+def extract_acoustic_embedding(
+    samples: np.ndarray, sample_rate: int, dim: Optional[int] = None
+) -> np.ndarray:
+    """Backward-compatible speaker embedding entrypoint.
+
+    Delegates to the SpeechBrain ECAPA encoder. The ``dim`` argument is
+    accepted for callers that still pass it, but the actual dimension is set by
+    the loaded model (192 for ``spkrec-ecapa-voxceleb``) and is ignored here.
+    """
+    return get_speaker_embedder().extract(samples, sample_rate)
 
 
 def compute_voice_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
@@ -192,4 +286,3 @@ def compute_voice_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
     cos_sim = dot / (norm_u * norm_v)
     # Scale from [-1, 1] to normalized [0, 1]
     return float(np.clip(cos_sim, 0.0, 1.0))
-
