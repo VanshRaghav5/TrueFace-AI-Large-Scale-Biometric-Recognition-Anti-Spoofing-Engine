@@ -2,25 +2,434 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hardware-Inspired Biometric Security Interface with Purple Accents */
 :root {
-  --tf-bg: #F6F8FB;
-  --tf-surface: #FFFFFF;
-  --tf-surface-muted: #EEF2F7;
-  --tf-text: #172033;
-  --tf-text-muted: #5E6B7E;
-  --tf-border: #DCE3EC;
-  --tf-primary: #2457C5;
-  --tf-primary-hover: #1D469F;
-  --tf-success: #18794E;
-  --tf-warning: #9A5B00;
-  --tf-danger: #B42318;
-  --tf-info: #176B87;
+  /* Monochrome Base */
+  --tf-bg: #0a0a0a;
+  --tf-bg-panel: #121212;
+  --tf-bg-elevated: #1a1a1a;
+  
+  /* Matte surfaces - subtle glass effect */
+  --tf-surface: #1a1a1a;
+  --tf-surface-hover: #222222;
+  --tf-surface-panel: #0f0f0f;
+  
+  /* Crisp text hierarchy */
+  --tf-text: #e5e5e5;
+  --tf-text-muted: #8a8a8a;
+  --tf-text-dim: #666666;
+  
+  /* Razor-thin borders */
+  --tf-border: #2a2a2a;
+  --tf-border-active: #3a3a3a;
+  --tf-border-focus: #10b981;
+  
+  /* Single sharp accent - Emerald for active/verified */
+  --tf-accent: #10b981;
+  --tf-accent-dark: #059669;
+  --tf-accent-bright: #34d399;
+  
+  /* Safety orange for alerts */
+  --tf-alert: #f97316;
+  --tf-alert-dark: #ea580c;
+  
+  /* Status colors - muted */
+  --tf-success: #10b981;
+  --tf-warning: #f59e0b;
+  --tf-danger: #ef4444;
+  --tf-info: #6b7280;
+}
+
+/* Base styles - hardware aesthetic */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background-color: var(--tf-bg);
+  background: var(--tf-bg);
   color: var(--tf-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  font-variant-numeric: tabular-nums;
 }
 
+/* Subtle grid pattern - like camera viewfinder */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+}
+
+/* Hardware-style utility classes */
+@layer utilities {
+  /* Flat matte panel with subtle glass effect */
+  .panel {
+    background: rgba(26, 26, 26, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--tf-border);
+  }
+  
+  .panel-hover {
+    transition: border-color 0.15s ease;
+  }
+  
+  .panel-hover:hover {
+    border-color: var(--tf-border-active);
+  }
+  
+  /* Sharp corners - instrument style */
+  .panel-card {
+    @apply panel;
+    border-radius: 2px;
+    padding: 1.5rem;
+  }
+  
+  /* Viewfinder brackets */
+  .viewfinder {
+    position: relative;
+  }
+  
+  .viewfinder::before,
+  .viewfinder::after,
+  .viewfinder .corner-tl,
+  .viewfinder .corner-tr,
+  .viewfinder .corner-bl,
+  .viewfinder .corner-br {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-color: var(--tf-accent);
+  }
+  
+  .viewfinder::before {
+    top: 0;
+    left: 0;
+    border-top: 2px solid;
+    border-left: 2px solid;
+  }
+  
+  .viewfinder::after {
+    top: 0;
+    right: 0;
+    border-top: 2px solid;
+    border-right: 2px solid;
+  }
+  
+  /* Laser scan line */
+  .scan-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--tf-accent);
+    animation: scan 2s ease-in-out infinite;
+  }
+  
+  @keyframes scan {
+    0%, 100% { top: 0; opacity: 0; }
+    50% { top: 100%; opacity: 1; }
+  }
+  
+  /* Snap transition - hardware feel */
+  .snap {
+    transition: all 0.1s cubic-bezier(0.4, 0, 0.6, 1);
+  }
+  
+  /* Monospace telemetry */
+  .telemetry {
+    font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-variant-numeric: tabular-nums slashed-zero;
+    letter-spacing: -0.02em;
+  }
+  
+  /* Terminal-style log */
+  .terminal {
+    @apply panel telemetry;
+    background: rgba(10, 10, 10, 0.9);
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  
+  .terminal-line {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.125rem 0;
+    border-bottom: 1px solid transparent;
+  }
+  
+  .terminal-line:hover {
+    background: rgba(255, 255, 255, 0.02);
+    border-bottom-color: var(--tf-border);
+  }
+  
+  .terminal-timestamp {
+    color: var(--tf-text-dim);
+    min-width: 60px;
+  }
+  
+  .terminal-status {
+    min-width: 50px;
+    font-weight: 600;
+  }
+  
+  .terminal-status.success { color: var(--tf-success); }
+  .terminal-status.warning { color: var(--tf-warning); }
+  .terminal-status.error { color: var(--tf-danger); }
+  .terminal-status.info { color: var(--tf-text-muted); }
+  
+  /* Badge - hardware style */
+  .badge {
+    @apply telemetry;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid var(--tf-border);
+    background: var(--tf-surface-panel);
+  }
+  
+  .badge-verified {
+    border-color: var(--tf-success);
+    color: var(--tf-success);
+  }
+  
+  .badge-scanning {
+    border-color: var(--tf-accent);
+    color: var(--tf-accent);
+    animation: pulse-border 1.5s ease-in-out infinite;
+  }
+  
+  @keyframes pulse-border {
+    0%, 100% { border-color: var(--tf-accent); opacity: 1; }
+    50% { border-color: var(--tf-accent-bright); opacity: 0.8; }
+  }
+  
+  .badge-denied {
+    border-color: var(--tf-danger);
+    color: var(--tf-danger);
+  }
+  
+  /* Smooth scroll animations */
+  .fade-in {
+    animation: fadeIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .slide-in-right {
+    animation: slideInRight 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  @keyframes slideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(40px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  
+  /* Loading skeleton */
+  .skeleton {
+    background: linear-gradient(90deg, var(--tf-surface-muted) 25%, var(--tf-surface) 50%, var(--tf-surface-muted) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+  
+  /* Button - hardware style */
+  .btn-primary {
+    @apply px-6 py-3 font-semibold text-sm snap;
+    background: var(--tf-accent);
+    color: #0a0a0a;
+    border: 1px solid var(--tf-accent);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .btn-primary:hover:not(:disabled) {
+    background: var(--tf-accent-bright);
+    border-color: var(--tf-accent-bright);
+  }
+  
+  .btn-primary:active:not(:disabled) {
+    background: var(--tf-accent-dark);
+  }
+  
+  .btn-primary:disabled {
+    background: var(--tf-surface);
+    color: var(--tf-text-dim);
+    border-color: var(--tf-border);
+    cursor: not-allowed;
+  }
+  
+  .btn-secondary {
+    @apply px-6 py-3 font-semibold text-sm snap;
+    background: transparent;
+    color: var(--tf-text);
+    border: 1px solid var(--tf-border);
+  }
+  
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--tf-surface-hover);
+    border-color: var(--tf-border-active);
+  }
+  
+  .btn-secondary:disabled {
+    color: var(--tf-text-dim);
+    cursor: not-allowed;
+  }
+  
+  /* Input - hardware style */
+  .glass-input {
+    @apply w-full px-4 py-3 text-sm snap;
+    background: var(--tf-surface-panel);
+    border: 1px solid var(--tf-border);
+    color: var(--tf-text);
+  }
+  
+  .glass-input:focus {
+    outline: none;
+    border-color: var(--tf-accent);
+    background: var(--tf-surface);
+  }
+  
+  .glass-input::placeholder {
+    color: var(--tf-text-dim);
+  }
+  
+  /* Metric display - monospace numbers */
+  .metric {
+    @apply telemetry;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+  
+  .metric-label {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--tf-text-muted);
+    font-weight: 600;
+  }
+  
+  /* Corner brackets - viewfinder style */
+  .brackets {
+    position: relative;
+  }
+  
+  .brackets::before,
+  .brackets::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+  }
+  
+  .brackets::before {
+    top: 0;
+    left: 0;
+    border-top: 2px solid var(--tf-accent);
+    border-left: 2px solid var(--tf-accent);
+  }
+  
+  .brackets::after {
+    top: 0;
+    right: 0;
+    border-top: 2px solid var(--tf-accent);
+    border-right: 2px solid var(--tf-accent);
+  }
+  
+  .brackets-bottom::before {
+    top: auto;
+    bottom: 0;
+    border-top: none;
+    border-bottom: 2px solid var(--tf-accent);
+  }
+  
+  .brackets-bottom::after {
+    top: auto;
+    bottom: 0;
+    border-top: none;
+    border-bottom: 2px solid var(--tf-accent);
+  }
+}
+
+/* Custom scrollbar - minimal */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--tf-border);
+  transition: background 0.15s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--tf-border-active);
+}
+
+/* Selection */
+::selection {
+  background: var(--tf-accent);
+  color: #0a0a0a;
+}
+
+/* Focus visible - accessibility */
+:focus-visible {
+  outline: 1px solid var(--tf-accent);
+  outline-offset: 2px;
+}

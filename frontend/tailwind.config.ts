@@ -9,26 +9,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        tf: {
-          bg: "#F6F8FB",
-          surface: "#FFFFFF",
-          "surface-muted": "#EEF2F7",
-          text: "#172033",
-          "text-muted": "#5E6B7E",
-          border: "#DCE3EC",
-          primary: {
-            DEFAULT: "#2457C5",
-            hover: "#1D469F",
-          },
-          success: "#18794E",
-          warning: "#9A5B00",
-          danger: "#B42318",
-          info: "#176B87",
-        },
+        dark: "#0a0a0a",
+        accent: "#10b981",
+        "accent-hover": "#059669",
       },
-      borderRadius: {
-        card: "12px",
-        input: "8px",
+      animation: {
+        float: "float 6s ease-in-out infinite",
+        "float-delayed": "float 6s ease-in-out 2s infinite",
+      },
+      keyframes: {
+        float: {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-20px)" },
+        },
       },
     },
   },
@@ -36,4 +29,3 @@ const config: Config = {
 };
 
 export default config;
-
