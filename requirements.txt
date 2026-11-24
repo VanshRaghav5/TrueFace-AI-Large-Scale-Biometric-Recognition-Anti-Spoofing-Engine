@@ -1,15 +1,81 @@
-# TrueFace AI-X — Project Root Requirements
-# References backend and evaluation dependencies
+# TrueFace AI-X - Consolidated Requirements
+# Single virtual environment for entire project (backend + evaluation + tools)
 
--r backend/requirements.txt
+# ============================================================================
+# Core FastAPI Backend Dependencies
+# ============================================================================
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.6.4
+pydantic-settings>=2.2.1
+python-multipart>=0.0.9
 
-# Additional tooling for evaluation and benchmarks
-scikit-learn>=1.4.0
+# ============================================================================
+# Database & ORM
+# ============================================================================
+sqlalchemy[asyncio]>=2.0.29
+asyncpg>=0.29.0
+aiosqlite>=0.17.0
+alembic>=1.13.1
+
+# ============================================================================
+# Scientific Computing & ML
+# ============================================================================
+numpy>=1.26.4
+scipy>=1.12.0
+scikit-learn>=1.4.2
+
+# ============================================================================
+# Computer Vision & Face Recognition
+# ============================================================================
+opencv-python-headless>=4.9.0.80
+torch>=2.2.2
+insightface>=0.7.3
+faiss-cpu>=1.8.0
+
+# ONNX Runtime (choose one):
+# For GPU: pip install onnxruntime-gpu>=1.17.3
+# For CPU: pip install onnxruntime>=1.17.3
+# onnxruntime>=1.17.3
+
+# ============================================================================
+# Voice Recognition & Audio Processing
+# ============================================================================
+torchaudio>=2.2.2
+speechbrain>=1.1.0
+soundfile>=0.12.1
+sentencepiece>=0.2.0
+hyperpyyaml>=1.2.0
+ruamel.yaml>=0.17.28,<0.19
+huggingface_hub>=0.27.0,<0.29
+
+# ============================================================================
+# Security & Authentication
+# ============================================================================
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# ============================================================================
+# Logging & Monitoring
+# ============================================================================
+structlog>=24.1.0
+
+# ============================================================================
+# Testing
+# ============================================================================
+pytest>=8.1.1,<9
+pytest-asyncio>=0.23.6
+httpx>=0.27.0
+
+# ============================================================================
+# Data Visualization & Analysis (for evaluation)
+# ============================================================================
 matplotlib>=3.8.0
 seaborn>=0.13.0
 pandas>=2.2.0
+
+# ============================================================================
+# Utilities
+# ============================================================================
 tqdm>=4.66.0
 tabulate>=0.9.0
-pytest>=8.0.0,<9
-pytest-asyncio>=0.23.0
-httpx>=0.27.0

@@ -1,99 +1,104 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Environments & virtualenvs
-.venv/
+# Virtual Environments (consolidated at root)
 venv/
-ENV/
 env/
-*.env
+ENV/
+.venv/
+backend/.venv/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
-!.env.example
+.env.*.local
 
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Node.js & Next.js
-node_modules/
-.next/
-out/
-build/
-dist/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
+# Models and large files
+models/**/*.onnx
+models/**/*.pkl
+models/**/*.pth
+models/**/*.pt
+models/**/*.bin
+models/**/*.safetensors
+*.onnx
+*.pkl
 
-# Unit test & coverage caches
+# Datasets
+Trueface_Dataset/
+datasets/
+*.zip
+*.tar.gz
+
+# Logs
+*.log
+logs/
+*.out
+
+# Testing
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
-.nox/
-.mypy_cache/
-.ruff_cache/
 
-# Model Checkpoints & Large Weights (Keep folders via .gitkeep)
-models/face/*
-!models/face/.gitkeep
-models/voice/*
-!models/voice/.gitkeep
-!models/voice/anti_spoofing/
-models/liveness/*
-!models/liveness/.gitkeep
-models/deepfake/*
-!models/deepfake/.gitkeep
-models/audio_antispoof/*
-!models/audio_antispoof/.gitkeep
-*.pt
-*.pth
-*.onnx
-*.bin
-*.tflite
-*.h5
-*.safetensors
+# Frontend (Next.js)
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+frontend/build/
+frontend/*.tsbuildinfo
+frontend/.turbo
 
-# Voice anti-spoofing: AASIST pretrained weights are small (~1.2 MB) and tracked.
-!models/voice/anti_spoofing/AASIST.pth
-!models/voice/anti_spoofing/AASIST-L.pth
+# Alembic
+alembic/versions/__pycache__/
 
-# Biometric & Evaluation Datasets (Keep folders via .gitkeep)
-evaluation/datasets/face/*
-!evaluation/datasets/face/.gitkeep
-evaluation/datasets/voice/*
-!evaluation/datasets/voice/.gitkeep
-evaluation/datasets/deepfake/*
-!evaluation/datasets/deepfake/.gitkeep
-Trueface_Dataset/*
-!Trueface_Dataset/.gitkeep
-evaluation/plots/*.png
-evaluation/plots/*.svg
-evaluation/plots/*.pdf
-!evaluation/plots/.gitkeep
-evaluation/reports/*
-!evaluation/reports/.gitkeep
-
-# Vector Index Artifacts
-*.faiss
-*.index
-*.faiss.meta
-
-# Logs & Temporary Files
-logs/
-*.log
+# Temporary files
 *.tmp
-*.temp
-_projfiles.txt
-
-# OS & Editor Files
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
+*.bak
 *.swp
-*.swo
+temp/
+tmp/
+
+# Project specific
+_projfiles.txt
+test.onnx
+BUG_FIXES_COMPREHENSIVE.md
+CLAUDE.md
+
+# Cache
+.cache/
+*.cache
