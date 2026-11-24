@@ -1,0 +1,31 @@
+{
+  "duration_seconds": 60.285,
+  "frames": 1550,
+  "faces_processed": 1568,
+  "average_fps": 25.711,
+  "minimum_fps_observed": 15.189,
+  "average_frame_processing_ms": 36.578,
+  "p95_frame_processing_ms": 42.006,
+  "average_embedding_and_gallery_ms": 0.064,
+  "model_initialization_ms": 2763.505,
+  "enrolled_identities": 2,
+  "enrollment_templates": 3,
+  "enrollment_failures": 0,
+  "providers": [
+    "CUDAExecutionProvider",
+    "CPUExecutionProvider"
+  ],
+  "cuda_active": true,
+  "environment": {
+    "python": "3.10.0",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "gpu": {
+      "nvidia_smi": "NVIDIA GeForce RTX 3050 Laptop GPU, 4096 MiB, 617.14"
+    }
+  },
+  "timing_scope": {
+    "frame_processing": "camera read excluded; detection, tracking, and cached recognition included",
+    "embedding_and_gallery": "recognition result timing; includes gallery matching and excludes detection",
+    "warmup": "not separately excluded by this camera benchmark"
+  }
+}

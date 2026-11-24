@@ -63,7 +63,12 @@ async def get_health():
                 "provider": face_runtime.status.pad_provider,
                 "error": face_runtime.status.pad_error,
             },
-            "face_deepfake": "configured" if deepfake_path.is_file() else "unavailable",
+            "face_deepfake": {
+                "status": "ready" if face_runtime.status.deepfake_initialized else "unavailable",
+                "model_name": face_runtime.status.deepfake_model_name,
+                "provider": face_runtime.status.deepfake_provider,
+                "error": face_runtime.status.deepfake_error,
+            },
             "voice": {
                 "status": "ready" if voice_runtime.status.initialized else "unavailable",
                 "recognizer": "ready" if voice_runtime.status.initialized else "unavailable",
