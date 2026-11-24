@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { UserPlus, ShieldAlert, Camera, Upload, Trash2, CheckCircle2, AlertCircle, RefreshCw, Mic, MicOff, Square } from "lucide-react";
+import VoiceWave from "@/components/VoiceWave";
+import { UserPlus, ShieldAlert, Camera, Upload, Trash2, CheckCircle2, AlertCircle, RefreshCw, Mic, Square, Users } from "lucide-react";
+import FileDropZone from "@/components/FileDropZone";
 
 interface EnrolledItem {
   subject_id: string;
@@ -299,317 +301,332 @@ export default function EnrollmentPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-tf-text">Subject Enrollment</h1>
-        <p className="text-sm text-tf-text-muted mt-1">
-          Register a reference identity into the TrueFace AI-X gallery using the InsightFace (SCRFD + ArcFace) pipeline.
-        </p>
+    <div className="relative">
+      {/* Background Gradient Orbs */}
+      <div className="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-primary/15 rounded-full blur-[128px] animate-float" />
+        <div className="absolute bottom-1/3 right-1/4 w-96 h-96 bg-accent/15 rounded-full blur-[128px] animate-float-delayed" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Registration Form */}
-        <div className="border border-tf-border rounded-card bg-tf-surface p-6 space-y-6 shadow-sm">
-          <div className="bg-tf-surface-muted p-4 rounded-input border border-tf-border flex gap-3 text-xs text-tf-text">
-            <ShieldAlert className="w-4 h-4 text-tf-warning flex-shrink-0 mt-0.5" />
-            <div>
-              <span className="font-semibold">Consent Requirement:</span> Enrollment extracts a 512-d normalized mathematical vector. Original media is processed transiently and discarded.
+      <div className="space-y-8 max-w-6xl mx-auto">
+        {/* Hero Header */}
+        <div className="glass-card p-8 text-center hover-lift">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 backdrop-blur-xl">
+              <UserPlus className="w-8 h-8 text-primary" />
             </div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
+              Biometric Enrollment
+            </h1>
           </div>
+          <p className="text-sm text-gray-400 max-w-2xl mx-auto">
+            Register reference identity templates using face detection and recognition pipeline with optional voice biometrics and security PIN
+          </p>
+        </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-tf-text">Subject Identifier</label>
-              <input
-                value={subjectId}
-                onChange={(e) => setSubjectId(e.target.value)}
-                placeholder="e.g. subj_1001"
-                className="mt-1 block w-full rounded-input border border-tf-border bg-tf-surface px-3 py-2 text-sm focus:outline-none focus:border-tf-primary"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-tf-text mb-2">Face Capture Method</label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (useCamera) stopCamera();
-                    setUseCamera(false);
-                  }}
-                  className={`flex-1 py-2 px-3 rounded-input text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors ${
-                    !useCamera
-                      ? "bg-tf-primary text-white border-tf-primary"
-                      : "bg-tf-surface text-tf-text border-tf-border hover:bg-tf-surface-muted"
-                  }`}
-                >
-                  <Upload className="w-3.5 h-3.5" /> Upload File
-                </button>
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className={`flex-1 py-2 px-3 rounded-input text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors ${
-                    useCamera
-                      ? "bg-tf-primary text-white border-tf-primary"
-                      : "bg-tf-surface text-tf-text border-tf-border hover:bg-tf-surface-muted"
-                  }`}
-                >
-                  <Camera className="w-3.5 h-3.5" /> Live Camera
-                </button>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Registration Form */}
+          <div className="glass-card p-6 space-y-6">
+            <div className="glass-card p-4 bg-yellow-500/5 border-yellow-500/20 flex gap-3">
+              <ShieldAlert className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-gray-300">
+                <span className="font-semibold">Consent Requirement:</span> Enrollment extracts a 512-d normalized mathematical vector. Original media is processed transiently and discarded.
               </div>
             </div>
 
-            {useCamera ? (
-              <div className="space-y-2">
-                <div className="relative aspect-video rounded-input overflow-hidden bg-black border border-tf-border">
-                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                </div>
-                {cameraActive && (
-                  <button
-                    type="button"
-                    onClick={capturePhoto}
-                    className="w-full py-2 bg-tf-success text-white rounded-input text-xs font-medium flex items-center justify-center gap-1.5"
-                  >
-                    <Camera className="w-3.5 h-3.5" /> Capture Photo
-                  </button>
-                )}
-              </div>
-            ) : (
+            <div className="space-y-5">
               <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Subject Identifier</label>
                 <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    setFaceImage(file);
-                    setPreview(file ? URL.createObjectURL(file) : null);
-                  }}
-                  className="block w-full text-xs text-tf-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-input file:border-0 file:text-xs file:font-medium file:bg-tf-surface-muted file:text-tf-text hover:file:bg-tf-border"
+                  value={subjectId}
+                  onChange={(e) => setSubjectId(e.target.value)}
+                  placeholder="e.g. subj_1001 or username"
+                  className="glass-input w-full"
                 />
               </div>
-            )}
 
-            {preview && (
-              <div className="relative rounded-input overflow-hidden border border-tf-border bg-tf-surface-muted p-1">
-                <img src={preview} alt="Selected face preview" className="max-h-48 w-full rounded-input object-contain" />
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-3">Face Capture Method</label>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (useCamera) stopCamera();
+                      setUseCamera(false);
+                    }}
+                    className={`btn-secondary ${!useCamera ? 'ring-2 ring-primary/50' : ''}`}
+                  >
+                    <Upload className="w-4 h-4" /> Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startCamera}
+                    className={`btn-secondary ${useCamera ? 'ring-2 ring-primary/50' : ''}`}
+                  >
+                    <Camera className="w-4 h-4" /> Camera
+                  </button>
+                </div>
+
+                {useCamera ? (
+                  <div className="space-y-3">
+                    <div className="relative aspect-video rounded-2xl overflow-hidden bg-black/50 backdrop-blur-xl border border-white/10 shadow-2xl">
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 border-2 border-primary/30 rounded-2xl pointer-events-none" />
+                    </div>
+                    {cameraActive && (
+                      <button
+                        type="button"
+                        onClick={capturePhoto}
+                        className="btn-primary w-full"
+                      >
+                        <Camera className="w-4 h-4" /> Capture Photo
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <FileDropZone
+                    accept="image/jpeg,image/png,image/webp"
+                    onFileSelect={(file) => {
+                      setFaceImage(file);
+                      setPreview(URL.createObjectURL(file));
+                    }}
+                    currentFile={faceImage}
+                  />
+                )}
+
+                {preview && (
+                  <div className="glass-card p-2 hover-lift mt-3">
+                    <img src={preview} alt="Face preview" className="w-full rounded-xl object-contain max-h-56" />
+                  </div>
+                )}
               </div>
-            )}
 
-            <div>
-              <label className="block text-sm font-medium text-tf-text mb-2">
-                Voice Biometric Sample <span className="text-xs text-tf-text-muted">(optional)</span>
-              </label>
-              <div className="flex gap-2 mb-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isRecording) stopVoiceRecording();
-                    setUseVoiceRecorder(false);
-                  }}
-                  className={`flex-1 py-2 px-3 rounded-input text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors ${
-                    !useVoiceRecorder
-                      ? "bg-tf-primary text-white border-tf-primary"
-                      : "bg-tf-surface text-tf-text border-tf-border hover:bg-tf-surface-muted"
-                  }`}
-                >
-                  <Upload className="w-3.5 h-3.5" /> Upload .wav
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUseVoiceRecorder(true)}
-                  className={`flex-1 py-2 px-3 rounded-input text-xs font-medium border flex items-center justify-center gap-1.5 transition-colors ${
-                    useVoiceRecorder
-                      ? "bg-tf-primary text-white border-tf-primary"
-                      : "bg-tf-surface text-tf-text border-tf-border hover:bg-tf-surface-muted"
-                  }`}
-                >
-                  <Mic className="w-3.5 h-3.5" /> Live Record
-                </button>
-              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-3">
+                  Voice Biometric Sample <span className="text-xs text-gray-500">(Optional)</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isRecording) stopVoiceRecording();
+                      setUseVoiceRecorder(false);
+                    }}
+                    className={`btn-secondary ${!useVoiceRecorder ? 'ring-2 ring-primary/50' : ''}`}
+                  >
+                    <Upload className="w-4 h-4" /> Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUseVoiceRecorder(true)}
+                    className={`btn-secondary ${useVoiceRecorder ? 'ring-2 ring-primary/50' : ''}`}
+                  >
+                    <Mic className="w-4 h-4" /> Record
+                  </button>
+                </div>
 
-              {useVoiceRecorder ? (
-                <div className="space-y-2">
-                  <div className="relative rounded-input overflow-hidden bg-tf-surface-muted border border-tf-border p-4">
-                    <div className="flex flex-col items-center justify-center space-y-3">
+                {useVoiceRecorder ? (
+                  <div className="glass-card p-6">
+                    <div className="flex flex-col items-center justify-center space-y-4">
                       {isRecording ? (
                         <>
-                          <div className="relative">
-                            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center animate-pulse">
-                              <Mic className="w-8 h-8 text-red-600" />
+                          <div className="relative w-full max-w-md">
+                            <VoiceWave isRecording={isRecording} className="h-40" />
+                            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-red-500/30 to-pink-500/30 backdrop-blur-xl flex items-center justify-center border border-red-500/40 animate-pulse">
+                                <Mic className="w-10 h-10 text-red-400" />
+                              </div>
                             </div>
-                            <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 animate-ping" />
                           </div>
-                          <div className="text-sm font-mono font-bold text-red-600">{formatDuration(recordingDuration)}</div>
-                          <p className="text-[11px] text-tf-text-muted">Recording... Speak clearly into your microphone</p>
+                          <div className="text-3xl font-mono font-bold text-red-400">{formatDuration(recordingDuration)}</div>
+                          <p className="text-xs text-gray-400">Recording... Speak clearly</p>
                           <button
                             type="button"
                             onClick={stopVoiceRecording}
-                            className="py-2 px-6 bg-red-600 text-white rounded-input text-xs font-medium flex items-center gap-1.5 hover:bg-red-700 transition-colors"
+                            className="btn-secondary bg-red-500/10 border-red-500/30 hover:bg-red-500/20 text-red-400"
                           >
-                            <Square className="w-3.5 h-3.5" /> Stop Recording
+                            <Square className="w-4 h-4" /> Stop Recording
                           </button>
                         </>
                       ) : voiceSample && voicePreviewUrl ? (
                         <>
-                          <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
-                            <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-emerald-500/20 to-green-500/20 backdrop-blur-xl flex items-center justify-center border border-emerald-500/30">
+                            <CheckCircle2 className="w-12 h-12 text-emerald-400" />
                           </div>
-                          <p className="text-xs font-semibold text-emerald-700">Voice Sample Recorded ({formatDuration(recordingDuration)})</p>
-                          <audio controls src={voicePreviewUrl} className="w-full max-w-xs" />
+                          <p className="text-sm font-semibold text-emerald-400">Voice Sample Recorded</p>
+                          <div className="text-xs text-gray-400 font-mono">{formatDuration(recordingDuration)}</div>
+                          <audio controls src={voicePreviewUrl} className="w-full" />
                           <div className="flex gap-2">
                             <button
                               type="button"
                               onClick={clearVoiceRecording}
-                              className="py-1.5 px-4 border border-tf-border text-tf-text hover:bg-tf-surface-muted rounded-input text-xs font-medium transition-colors"
+                              className="btn-secondary"
                             >
-                              <Trash2 className="w-3 h-3 inline mr-1" /> Discard
+                              <Trash2 className="w-4 h-4" /> Discard
                             </button>
                             <button
                               type="button"
                               onClick={() => { clearVoiceRecording(); startVoiceRecording(); }}
-                              className="py-1.5 px-4 border border-tf-border text-tf-text hover:bg-tf-surface-muted rounded-input text-xs font-medium transition-colors"
+                              className="btn-secondary"
                             >
-                              <RefreshCw className="w-3 h-3 inline mr-1" /> Re-record
+                              <RefreshCw className="w-4 h-4" /> Re-record
                             </button>
                           </div>
                         </>
                       ) : (
                         <>
-                          <div className="w-16 h-16 rounded-full bg-tf-surface flex items-center justify-center border-2 border-dashed border-tf-border">
-                            <Mic className="w-8 h-8 text-tf-text-muted" />
+                          <div className="w-24 h-24 rounded-full glass flex items-center justify-center border-2 border-dashed border-white/20">
+                            <Mic className="w-12 h-12 text-gray-400" />
                           </div>
-                          <p className="text-xs text-tf-text-muted">Click below to start recording your voice</p>
+                          <p className="text-xs text-gray-400">Click below to start recording</p>
                           <button
                             type="button"
                             onClick={startVoiceRecording}
-                            className="py-2 px-6 bg-tf-primary text-white rounded-input text-xs font-medium flex items-center gap-1.5 hover:bg-tf-primary-hover transition-colors"
+                            className="btn-primary"
                           >
-                            <Mic className="w-3.5 h-3.5" /> Start Recording
+                            <Mic className="w-4 h-4" /> Start Recording
                           </button>
                         </>
                       )}
                     </div>
                   </div>
-                  <p className="text-[11px] text-tf-text-muted">Speak for 3-10 seconds for best speaker verification accuracy. Auto-converts to WAV.</p>
-                </div>
-              ) : (
-                <div>
-                  <input
-                    type="file"
+                ) : (
+                  <FileDropZone
                     accept="audio/wav,audio/x-wav"
-                    onChange={(e) => { setVoiceSample(e.target.files?.[0] ?? null); setVoicePreviewUrl(null); }}
-                    className="block w-full text-xs text-tf-text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-input file:border-0 file:text-xs file:font-medium file:bg-tf-surface-muted file:text-tf-text hover:file:bg-tf-border"
+                    onFileSelect={(file) => {
+                      setVoiceSample(file);
+                      setVoicePreviewUrl(null);
+                    }}
+                    currentFile={voiceSample}
                   />
-                  {voiceSample && <div className="text-[11px] text-emerald-600 font-mono mt-1">Loaded: {voiceSample.name}</div>}
-                </div>
-              )}
-              <p className="text-[11px] text-tf-text-muted mt-0.5">Used for speaker verification and synthetic speech anti-spoofing.</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-tf-text">
-                Security PIN / Final Secret Code <span className="text-xs text-tf-text-muted">(Optional / Recommended)</span>
-              </label>
-              <input
-                type="password"
-                value={securityPin}
-                onChange={(e) => setSecurityPin(e.target.value)}
-                placeholder="e.g. 482910 or custom passcode"
-                className="mt-1 block w-full rounded-input border border-tf-border bg-tf-surface px-3 py-2 text-sm focus:outline-none focus:border-tf-primary"
-              />
-              <p className="text-[11px] text-tf-text-muted mt-0.5">Enforces final possession/knowledge factor before access is granted.</p>
-            </div>
-
-            <div className="flex items-start gap-2 pt-2">
-              <input
-                type="checkbox"
-                id="consent"
-                checked={consent}
-                onChange={(e) => setConsent(e.target.checked)}
-                className="mt-0.5 rounded border-tf-border text-tf-primary focus:ring-tf-primary"
-              />
-              <label htmlFor="consent" className="text-xs text-tf-text cursor-pointer leading-relaxed">
-                I confirm explicit informed consent has been obtained for this reference subject.
-              </label>
-            </div>
-          </div>
-
-          <button
-            disabled={!consent || !subjectId.trim() || !faceImage || submitting}
-            onClick={submitEnrollment}
-            className="w-full py-2.5 px-4 bg-tf-primary disabled:bg-tf-surface-muted disabled:text-tf-text-muted text-white rounded-input text-sm font-medium flex items-center justify-center gap-2 transition-colors hover:bg-tf-primary-hover shadow-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            {submitting ? "Extracting & Registering..." : "Enroll Subject Reference"}
-          </button>
-
-          {message && (
-            <div
-              className={`p-3 rounded-input text-xs flex items-center gap-2 ${
-                message.type === "success"
-                  ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                  : message.type === "error"
-                  ? "bg-red-50 text-red-800 border border-red-200"
-                  : "bg-blue-50 text-blue-800 border border-blue-200"
-              }`}
-            >
-              {message.type === "success" ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-              )}
-              <span>{message.text}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Gallery / Enrolled Subjects List */}
-        <div className="border border-tf-border rounded-card bg-tf-surface p-6 space-y-4 shadow-sm flex flex-col">
-          <div className="flex items-center justify-between border-b border-tf-border pb-3">
-            <div>
-              <h2 className="text-base font-semibold text-tf-text">Enrolled Gallery</h2>
-              <p className="text-xs text-tf-text-muted">Active identity templates in the database and FAISS index</p>
-            </div>
-            <button
-              onClick={fetchEnrolledSubjects}
-              disabled={loadingSubjects}
-              title="Refresh List"
-              className="p-1.5 rounded-input text-tf-text-muted hover:text-tf-text hover:bg-tf-surface-muted"
-            >
-              <RefreshCw className={`w-4 h-4 ${loadingSubjects ? "animate-spin" : ""}`} />
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto max-h-[460px] space-y-2.5">
-            {enrolledSubjects.length === 0 ? (
-              <div className="py-12 text-center text-xs text-tf-text-muted">
-                {loadingSubjects ? "Loading gallery..." : "No subjects enrolled yet. Complete the form to enroll your first face."}
+                )}
+                <p className="text-xs text-gray-500 mt-2">Used for speaker verification and synthetic speech detection.</p>
               </div>
-            ) : (
-              enrolledSubjects.map((item) => (
-                <div
-                  key={item.subject_id}
-                  className="flex items-center justify-between p-3 rounded-input border border-tf-border bg-tf-surface-muted text-xs hover:border-tf-primary/50 transition-colors"
-                >
-                  <div className="space-y-1">
-                    <div className="font-semibold text-tf-text flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
-                      {item.subject_id}
-                    </div>
-                    <div className="text-[11px] text-tf-text-muted">
-                      Enrolled: {item.created_at ? new Date(item.created_at).toLocaleDateString() : "Active"}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Security PIN <span className="text-xs text-gray-500">(Optional / Recommended)</span>
+                </label>
+                <input
+                  type="password"
+                  value={securityPin}
+                  onChange={(e) => setSecurityPin(e.target.value)}
+                  placeholder="e.g. 482910 or custom passcode"
+                  className="glass-input w-full"
+                />
+                <p className="text-xs text-gray-500 mt-2">Final knowledge factor for zero-trust authentication.</p>
+              </div>
+
+              <div className="flex items-start gap-3 pt-2">
+                <input
+                  type="checkbox"
+                  id="consent"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="mt-1 rounded border-white/20 bg-white/5 text-primary focus:ring-primary focus:ring-offset-0 focus:ring-offset-dark cursor-pointer"
+                />
+                <label htmlFor="consent" className="text-xs text-gray-300 cursor-pointer leading-relaxed">
+                  I confirm explicit informed consent has been obtained for this reference subject.
+                </label>
+              </div>
+            </div>
+
+            <button
+              disabled={!consent || !subjectId.trim() || !faceImage || submitting}
+              onClick={submitEnrollment}
+              className="btn-primary w-full !py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <UserPlus className="w-5 h-5" />
+              {submitting ? "Extracting & Registering..." : "Enroll Subject Reference"}
+            </button>
+
+            {message && (
+              <div
+                className={`glass-card p-4 flex items-start gap-3 ${
+                  message.type === "success"
+                    ? "bg-emerald-500/10 border-emerald-500/30"
+                    : message.type === "error"
+                    ? "bg-red-500/10 border-red-500/30"
+                    : "bg-blue-500/10 border-blue-500/30"
+                }`}
+              >
+                {message.type === "success" ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                )}
+                <span className={`text-sm ${
+                  message.type === "success" ? "text-emerald-400" : message.type === "error" ? "text-red-400" : "text-blue-400"
+                }`}>{message.text}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Gallery / Enrolled Subjects List */}
+          <div className="glass-card p-6 space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <Users className="w-5 h-5 text-primary" />
+                  <h2 className="text-base font-semibold text-white">Enrolled Gallery</h2>
+                </div>
+                <p className="text-xs text-gray-400">Active identity templates in vector index</p>
+              </div>
+              <button
+                onClick={fetchEnrolledSubjects}
+                disabled={loadingSubjects}
+                title="Refresh List"
+                className="p-2 rounded-xl glass hover:bg-white/5 transition-all disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 text-gray-400 ${loadingSubjects ? "animate-spin" : ""}`} />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[560px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+              {enrolledSubjects.length === 0 ? (
+                <div className="py-24 text-center space-y-4">
+                  <div className="relative inline-block">
+                    <div className="w-20 h-20 rounded-full glass flex items-center justify-center border-2 border-dashed border-white/20">
+                      <Users className="w-10 h-10 text-gray-400" />
                     </div>
                   </div>
-                  <button
-                    onClick={() => deleteSubject(item.subject_id)}
-                    className="p-1.5 text-tf-text-muted hover:text-tf-danger rounded-input hover:bg-tf-surface transition-colors"
-                    title="Deactivate Subject"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-300 font-medium">
+                      {loadingSubjects ? "Loading gallery..." : "No Subjects Enrolled"}
+                    </p>
+                    <p className="text-xs text-gray-500 max-w-xs mx-auto">
+                      Complete the enrollment form to register your first biometric reference.
+                    </p>
+                  </div>
                 </div>
-              ))
-            )}
+              ) : (
+                enrolledSubjects.map((item) => (
+                  <div
+                    key={item.subject_id}
+                    className="glass-card p-4 hover-lift group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <div className="font-semibold text-white flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                          {item.subject_id}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          Enrolled: {item.created_at ? new Date(item.created_at).toLocaleDateString() : "Active"}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => deleteSubject(item.subject_id)}
+                        className="p-2 rounded-xl text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                        title="Deactivate Subject"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>

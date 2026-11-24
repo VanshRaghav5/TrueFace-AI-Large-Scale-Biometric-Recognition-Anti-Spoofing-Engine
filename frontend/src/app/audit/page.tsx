@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -31,50 +32,188 @@ export default function AuditPage() {
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Audit log unavailable"));
   }, []);
 
+  const stats = useMemo(() => {
+    const total = events.length;
+    const allowed = events.filter(e => e.overall_decision === "allow").length;
+    const blocked = total - allowed;
+    const avgLatency = total > 0 
+      ? Math.round(events.reduce((sum, e) => sum + e.latency_ms, 0) / total)
+      : 0;
+    
+    return { total, allowed, blocked, avgLatency };
+  }, [events]);
+
+  const pieData = [
+    { name: "Allow", value: stats.allowed, color: "#10b981" },
+    { name: "Block", value: stats.blocked, color: "#f97316" },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-tf-text">Audit Log &amp; Forensics</h1>
-        <p className="text-sm text-tf-text-muted">
-          Tamper-evident record of verification attempts, decisions, calibrated scores, and reason codes.
+    <div className="min-h-screen p-6 space-y-6">
+      {/* Header */}
+      <div className="panel p-6">
+        <h1 className="text-2xl font-bold text-white">AUDIT LOG & FORENSICS</h1>
+        <p className="text-xs text-gray-500 font-mono mt-1">
+          Tamper-evident record of verification attempts, decisions, calibrated scores, and reason codes
         </p>
       </div>
 
-      <div className="border border-tf-border rounded-card bg-tf-surface overflow-hidden">
-        <table className="min-w-full divide-y divide-tf-border text-sm">
-          <thead className="bg-tf-surface-muted text-tf-text-muted text-left text-xs uppercase font-medium">
-            <tr>
-              <th className="px-6 py-3">Timestamp</th>
-              <th className="px-6 py-3">Session ID</th>
-              <th className="px-6 py-3">Claimed Subject</th>
-              <th className="px-6 py-3">Decision</th>
-              <th className="px-6 py-3">Face / PAD</th>
-              <th className="px-6 py-3">Reason Codes</th>
-              <th className="px-6 py-3">Latency</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-tf-border text-tf-text">
-            {events.length === 0 ? (
-              <tr><td colSpan={7} className="px-6 py-8 text-center text-tf-text-muted">
-                {error || "No recent audit events recorded."}
-              </td></tr>
-            ) : events.map((event) => (
-              <tr key={event.session_id}>
-                <td className="px-6 py-3">{new Date(event.timestamp).toLocaleString()}</td>
-                <td className="px-6 py-3 font-mono text-xs">{event.session_id}</td>
-                <td className="px-6 py-3">{event.claimed_subject_id ?? "—"}</td>
-                <td className="px-6 py-3">{event.overall_decision}</td>
-                <td className="px-6 py-3 text-xs">
-                  <div>Match: {event.face_similarity == null ? "—" : event.face_similarity.toFixed(3)}</div>
-                  <div>Real: {event.face_liveness == null ? "—" : event.face_liveness.toFixed(3)}</div>
-                  <div>Spoof: {event.face_pad_spoof == null ? "—" : event.face_pad_spoof.toFixed(3)}</div>
-                </td>
-                <td className="px-6 py-3">{event.reason_codes.join(", ")}</td>
-                <td className="px-6 py-3">{event.latency_ms} ms</td>
+      {/* Summary Strip with Donut Chart */}
+      <div className="panel p-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
+          <div className="text-center">
+            <div className="text-3xl font-mono font-bold text-white telemetry">
+              {stats.total}
+            </div>
+            <div className="text-xs text-gray-600 font-mono uppercase tracking-wider mt-1">
+              Total Attempts
+            </div>
+          </div>
+          
+          <div className="flex justify-center">
+            <ResponsiveContainer width={100} height={100}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx={50}
+                  cy={50}
+                  innerRadius={30}
+                  outerRadius={45}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          
+          <div className="text-center">
+            <div className="text-3xl font-mono font-bold text-tf-accent telemetry">
+              {stats.avgLatency}ms
+            </div>
+            <div className="text-xs text-gray-600 font-mono uppercase tracking-wider mt-1">
+              Avg Latency
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 text-center">
+            <div>
+              <div className="text-xl font-mono font-bold text-tf-accent telemetry">
+                {stats.allowed}
+              </div>
+              <div className="text-xs text-gray-600 font-mono">Allowed</div>
+            </div>
+            <div>
+              <div className="text-xl font-mono font-bold text-tf-alert telemetry">
+                {stats.blocked}
+              </div>
+              <div className="text-xs text-gray-600 font-mono">Blocked</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Audit Table */}
+      <div className="panel overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-tf-border text-sm">
+            <thead className="bg-tf-surface text-left">
+              <tr>
+                <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-gray-500">Timestamp</th>
+                <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-gray-500">Session</th>
+                <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-gray-500">Subject</th>
+                <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-gray-500">Decision</th>
+                <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-gray-500">Scores</th>
+                <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-gray-500">Reason Codes</th>
+                <th className="px-4 py-3 text-xs font-mono uppercase tracking-wider text-gray-500">Latency</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-tf-border">
+              {events.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center">
+                    <div className="text-gray-600 font-mono text-sm">
+                      {error || "No recent audit events recorded"}
+                    </div>
+                  </td>
+                </tr>
+              ) : events.map((event) => (
+                <tr key={event.session_id} className="hover:bg-tf-surface transition-colors">
+                  <td className="px-4 py-3 text-xs text-gray-400 font-mono">
+                    {new Date(event.timestamp).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3 text-xs font-mono text-gray-500">
+                    {event.session_id.substring(0, 12)}...
+                  </td>
+                  <td className="px-4 py-3 text-xs font-mono text-white">
+                    {event.claimed_subject_id ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {event.overall_decision === "allow" ? (
+                      <span className="badge-verified text-xs">ALLOW</span>
+                    ) : (
+                      <span className="badge-denied text-xs">BLOCK</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-xs space-y-1">
+                    {/* Visual Score Bars */}
+                    {event.face_liveness != null && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-600 font-mono w-12">Real:</span>
+                        <div className="flex-1 h-1 bg-tf-border">
+                          <div 
+                            className="h-full bg-tf-accent"
+                            style={{ width: `${event.face_liveness * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-mono telemetry text-tf-accent w-12">
+                          {(event.face_liveness * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    )}
+                    {event.face_pad_spoof != null && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-600 font-mono w-12">Spoof:</span>
+                        <div className="flex-1 h-1 bg-tf-border">
+                          <div 
+                            className="h-full bg-tf-alert"
+                            style={{ width: `${event.face_pad_spoof * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-mono telemetry text-tf-alert w-12">
+                          {(event.face_pad_spoof * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {event.reason_codes.map((code, idx) => (
+                        <span 
+                          key={idx}
+                          className="inline-block px-2 py-0.5 border border-tf-border text-xs font-mono text-gray-500"
+                        >
+                          {code}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs font-mono telemetry text-gray-400">
+                    {event.latency_ms}ms
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="text-center text-xs text-gray-600 font-mono">
+        © {new Date().getFullYear()} TrueFace AI-X. All rights reserved.
       </div>
     </div>
   );
