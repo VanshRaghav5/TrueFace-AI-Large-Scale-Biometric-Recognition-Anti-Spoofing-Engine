@@ -626,44 +626,7 @@ This project is provided for academic research and educational purposes. It is n
 - ❌ Production security systems
 - ❌ High-risk applications
 
-See LICENSE file for full terms.
 
----
-
-## 🙏 Acknowledgments
-
-This project uses the following open-source technologies:
-
-### Models & Frameworks
-- **InsightFace** - Face recognition models
-- **SpeechBrain** - Speaker verification
-- **FAISS** - Vector similarity search
-- **PyTorch** - Deep learning framework
-- **ONNX Runtime** - Model inference
-
-### Backend
-- **FastAPI** - Web framework
-- **SQLAlchemy** - ORM
-- **Alembic** - Database migrations
-- **Pydantic** - Data validation
-
-### Frontend
-- **Next.js** - React framework
-- **Tailwind CSS** - Styling
-- **Recharts** - Data visualization
-- **Lucide** - Icons
-
----
-
-## 📞 Support
-
-For questions, issues, or discussions:
-
-- **Issues:** [GitHub Issues](https://github.com/yourusername/TrueFaceAI/issues)
-- **Documentation:** [docs/](docs/)
-- **Email:** your.email@example.com
-
----
 
 <div align="center">
 
