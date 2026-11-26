@@ -659,9 +659,8 @@ This project uses the following open-source technologies:
 
 For questions, issues, or discussions:
 
-- **Issues:** [GitHub Issues](https://github.com/yourusername/TrueFaceAI/issues)
 - **Documentation:** [docs/](docs/)
-- **Email:** your.email@example.com
+- **Email:** vanshraghav81@gmail.com
 
 ---
 
